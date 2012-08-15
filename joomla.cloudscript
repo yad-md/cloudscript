@@ -13,6 +13,8 @@ globals
     joomla_db_name          = 'joomla'
     joomla_db_username      = 'joomla'
     joomla_db_password      = lib::random_password()
+    server_password         = lib::random_password()
+    console_password        = lib::random_password()
 
 thread joomla_setup
     tasks                   = [joomla_server_setup]
@@ -26,10 +28,12 @@ task joomla_server_setup
     # create joomla server root password key
     /key/password joomla_server_password_key read_or_create
         key_group           = _SERVER
+        password            = server_password
     
     # create joomla server console key
     /key/password joomla_server_console_key read_or_create
         key_group           = _CONSOLE
+        password            = console_password
         
     # create storage slice keys
     /key/token joomla_slice_key read_or_create
@@ -191,5 +195,4 @@ password '{{ joomla_admin_password }}'.  You can also
 visit your public Joomla site at the following URL:
 
 http://{{ joomla_server.ipaddress_public }}
-
 _eof
