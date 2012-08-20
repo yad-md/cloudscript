@@ -3,7 +3,7 @@ cloudscript hadoop_single_node
     result_template         = hadoop_result_template
 
 globals
-    server_password	        = lib::random_password()
+    server_password	    = lib::random_password()
     console_password        = lib::random_password()
     hadoop_slice_user       = 'hadoop'
     
