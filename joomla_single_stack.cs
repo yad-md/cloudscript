@@ -3,12 +3,12 @@ cloudscript joomla_single_stack
     result_template         = joomla_result_template
 
 globals
-    mysql_root_password     = 'def27yam'
-    joomla_admin_password   = 'def27yam'
+    mysql_root_password     = lib::random_password()
+    joomla_admin_password   = lib::random_password()
+    joomla_slice_user       = 'joomla'
     joomla_db_name          = 'joomla'
     joomla_db_username      = 'joomla'
-    joomla_db_password       = 'def27yam'
-    joomla_slice_user       = 'joomla'
+    joomla_db_password      = lib::random_password()
 
 thread joomla_setup
     tasks                   = [joomla_server_setup]
@@ -167,15 +167,24 @@ sed -e "s/\$user = ''/\$user = '{{ joomla_db_username }}'/g" \
 echo "Doing cleanup"
 
 # cleanup setup files
-# rm /tmp/setup.mysql
-# rm /tmp/create_accounts.mysql
-# rm /var/www/joomla.sql
+rm -f /tmp/setup.mysql
+rm -f /tmp/create_accounts.mysql
+rm -f /var/www/joomla.sql
 rm -Rf /var/www/installation
 rm -rf /var/www/index.html
 _eof
 
 text_template joomla_result_template
 
-You can now access your Joomla administration site at http://{{ joomla_server.ipaddress_public }}/administrator by logging in as the 'admin' user with the password '{{ joomla_admin_password }}'.  You can also visit your public Joomla site at http://{{ joomla_server.ipaddress_public }}
+You can now access your Joomla administration site at the
+following URL:
+
+http://{{ joomla_server.ipaddress_public }}/administrator 
+
+You can login with the username 'admin' using the 
+password '{{ joomla_admin_password }}'.  You can also 
+visit  your public Joomla site at the following URL:
+
+http://{{ joomla_server.ipaddress_public }}
 
 _eof
