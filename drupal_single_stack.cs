@@ -1,13 +1,14 @@
-cloudscript drupal
-    version              = '2012-03-14'
+cloudscript drupal_single_stack
+    version              = '2012-05-20'
     result_template      = drupal_result_template  
 
 globals
-    server_password      = '12Wdesa32wert'
-    console_password     = 'uryte778362UY'
+    server_password      = lib::random_password()
+    console_password     = lib::random_password()
+    drupal_db_password   = lib::random_password()
     drupal_db_name       = 'drupal'
     drupal_db_username   = 'drupal'
-    drupal_db_password   = '09a8GEsy7e2df'
+    drupal_slice_user    = 'drupal'
 
 thread drupal_install
     tasks                = [config]
@@ -27,7 +28,7 @@ task config
     
     # storage slice key
     /key/token drupal_slice_key read_or_create
-        username            = 'drupalsliceuser'
+        username            = drupal_slice_user
 
     # slice
     /storage/slice drupal_slice read_or_create

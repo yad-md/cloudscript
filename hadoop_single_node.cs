@@ -3,6 +3,8 @@ cloudscript hadoop_single_node
     result_template         = hadoop_result_template
 
 globals
+    server_password	        = lib::random_password()
+    console_password        = lib::random_password()
     hadoop_slice_user       = 'hadoop'
     
 thread hadoop_setup
@@ -17,10 +19,12 @@ task hadoop_node_setup
     # create hadoop server root password key
     /key/password hadoop_server_password_key read_or_create
         key_group           = _SERVER
+        password            = server_password
     
     # create hadoop server console key
     /key/password hadoop_server_console_key read_or_create
         key_group           = _CONSOLE
+        password            = console_password
         
     # create storage slice keys
     /key/token hadoop_slice_key read_or_create
@@ -424,6 +428,9 @@ to root@{{ hadoop_server.ipaddress_public }} using the password:
 
 {{ hadoop_server_password_key.password }}
 
-You can also access the status of your HDFS cluster on the web at http://{{ hadoop_server.ipaddress_public }}:50070/
+You can also access the status of your HDFS cluster 
+on the web at the following URL:
+
+http://{{ hadoop_server.ipaddress_public }}:50070/
 
 _eof
