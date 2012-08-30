@@ -1,25 +1,27 @@
 cloudscript wordpress_single_stack
-    version                 = '2012-05-20'  
-    result_template         = wordpress_result_template
+    version                     = '2012-05-20'  
+    result_template             = wordpress_result_template
 
 globals
-    mysql_root_password         = 'zfd99gwe'
-    wordpress_admin_password    = 'zfd99gwe'
-    wordpress_db_name           = 'wordpress'
-    wordpress_db_username       = 'wordpress'
-    wordpress_db_password       = 'zfd99gwe'
+    server_password	            = lib::random_password()
+    console_password            = lib::random_password()
+    mysql_root_password         = lib::random_password()
+    wordpress_admin_password    = lib::random_password()
     wordpress_slice_user        = 'wordpress'
-    wordpress_auth_key          = 'zfd99gwe'
-    wordpress_secure_auth_key   = 'zfd99gwe'
-    wordpress_logged_in_key     = 'zfd99gwe'
-    wordpress_nonce_key         = 'zfd99gwe'
-    wordpress_auth_salt         = 'zfd99gwe'
-    wordpress_secure_auth_salt  = 'zfd99gwe'
-    wordpress_logged_in_salt    = 'zfd99gwe'
-    wordpress_nonce_salt        = 'zfd99gwe'
+    wordpress_db_username       = 'wordpress'
+    wordpress_db_name           = 'wordpress'
+    wordpress_db_password       = lib::random_password()
+    wordpress_auth_key          = lib::random_password()
+    wordpress_secure_auth_key   = lib::random_password()
+    wordpress_logged_in_key     = lib::random_password()
+    wordpress_nonce_key         = lib::random_password()
+    wordpress_auth_salt         = lib::random_password()
+    wordpress_secure_auth_salt  = lib::random_password()
+    wordpress_logged_in_salt    = lib::random_password()
+    wordpress_nonce_salt        = lib::random_password()
     
 thread wordpress_setup
-    tasks                   = [wordpress_server_setup]
+    tasks                       = [wordpress_server_setup]
 
 task wordpress_server_setup
 
@@ -30,10 +32,12 @@ task wordpress_server_setup
     # create wordpress server root password key
     /key/password wordpress_server_password_key read_or_create
         key_group           = _SERVER
+        password            = server_password
     
     # create wordpress server console key
     /key/password wordpress_server_console_key read_or_create
         key_group           = _CONSOLE
+        password            = console_password
         
     # create storage slice keys
     /key/token wordpress_slice_key read_or_create
@@ -176,6 +180,8 @@ _eof
 
 text_template wordpress_result_template
 
-Your wordpress site is ready: http://{{ wordpress_server.ipaddress_public }}/
+Your wordpress site is ready at the following URL:
+
+http://{{ wordpress_server.ipaddress_public }}/
 
 _eof

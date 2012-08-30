@@ -3,6 +3,8 @@ cloudscript puppet_multi_stack
     result_template      = puppet_pair_result_tmpl
 
 globals
+    server_password	     = lib::random_password()
+    console_password     = lib::random_password()
     puppet_slice_user    = 'puppet'
 
 thread puppet_setup
@@ -16,9 +18,11 @@ task puppet_master_agent_setup
 
     /key/password puppet_server_pass_key read_or_create
         key_group        = _SERVER
+        password         = server_password        
     
     /key/password puppet_server_console_key read_or_create
         key_group        = _CONSOLE
+        password         = console_password        
 
     # create storage slice keys
     /key/token puppet_slice_key read_or_create

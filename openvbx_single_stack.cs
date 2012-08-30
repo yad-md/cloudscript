@@ -1,14 +1,13 @@
-cloudscript openvbx
-    version              = '2012-03-14'
+cloudscript openvbx_single_stack
+    version              = '2012-05-20'
     result_template      = openvbx_result_template  
 
 globals
-    server_password	 = 'woompaloompa'
-    console_password     = 'goompaloompa'
+    server_password	     = lib::random_password()
+    console_password     = lib::random_password()
+    openvbx_db_password  = lib::random_password()
     openvbx_db_name      = 'OpenVBX'
     openvbx_db_username	 = 'openvbx'
-    openvbx_db_password  = 'mersawersa'
-
 
 thread openvbx_install
     tasks                = [config]
@@ -185,24 +184,6 @@ cd /var/www/openvbx && mv ./htaccess_dist ./.htaccess && sed 's@# RewriteBase /o
 # restart web server
 /etc/init.d/apache2 stop  > /dev/null 2>&1
 /etc/init.d/apache2 start > /dev/null 2>&1
-
-#
-# firewall setup
-#
-
-# lock down mysql access from public interface
-iptables -I INPUT 1 -j DROP -p tcp --dport 3306 -s 0.0.0.0/0 -d 0.0.0.0/0 --in-interface eth0 
-iptabes-save > /etc/iptables.rules
-cat <<EOF>/etc/init.d/firewall
-#!/bin/sh
-
-# persist iptables block on public interface access to port 3306 (mysql)
-iptables-restore < /etc/iptables.rules
-
-EOF
-chmod +X /etc/init.d/firewall
-update-rc.d firewall defaults &> /dev/null
-
 
 echo "OK: install OpenVBX service"
 

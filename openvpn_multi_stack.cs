@@ -3,6 +3,8 @@ cloudscript openvpn_multi_stack
     result_template      = openvpn_pair_result_tmpl
 
 globals
+    server_password	     = lib::random_password()
+    console_password     = lib::random_password()
     openvpn_slice_user   = 'openvpn'
 
 thread openvpn_setup
@@ -16,9 +18,12 @@ task openvpn_server_client_setup
 
     /key/password openvpn_server_pass_key read_or_create
         key_group        = _SERVER
+        password         = server_password
+        
     
     /key/password openvpn_server_console_key read_or_create
         key_group        = _CONSOLE
+        password         = console_password        
 
     # create storage slice keys
     /key/token openvpn_slice_key read_or_create
