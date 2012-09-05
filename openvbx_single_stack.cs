@@ -3,23 +3,23 @@ cloudscript openvbx_single_stack
     result_template      = openvbx_result_template  
 
 globals
-    server_password	     = lib::random_password()
-    console_password     = lib::random_password()
-    openvbx_db_password  = lib::random_password()
-    openvbx_db_name      = 'OpenVBX'
-    openvbx_db_username	 = 'openvbx'
+    server_password	    = lib::random_password()
+    console_password    = lib::random_password()
+    openvbx_db_password = lib::random_password()
+    openvbx_db_name     = 'OpenVBX'
+    openvbx_db_username = 'openvbx'
 
 thread openvbx_install
-    tasks                = [config]
+    tasks               = [config]
     
 task config
     /key/password openvbx_server_key read_or_create
-        key_group        = _SERVER
-        password         = server_password
+        key_group       = _SERVER
+        password        = server_password
     
     /key/password openvbx_console_key read_or_create
-        key_group        = _CONSOLE
-        password         = console_password
+        key_group       = _CONSOLE
+        password        = console_password
 
     #
     # create openvbx storage slice, bootstrap script and recipe
@@ -27,40 +27,40 @@ task config
     
     # storage slice key
     /key/token openvbx_slice_key read_or_create
-        username            = 'openvbxsliceuser'
+        username        = 'openvbxsliceuser'
 
     # slice
     /storage/slice openvbx_slice read_or_create
-        keys                = [openvbx_slice_key]
+        keys            = [openvbx_slice_key]
     
     # slice container
     /storage/container openvbx_container => [openvbx_slice] read_or_create
-        slice               = openvbx_slice
+        slice           = openvbx_slice
     
     # store script as object in cloudstorage
     /storage/object openvbx_install_script_object => [openvbx_slice, openvbx_container] read_or_create
-        container_name      = 'openvbx_container'
-        file_name           = 'install_openvbx.sh'
-        slice               =  openvbx_slice
-        content_data        =  install_openvbx_sh
+        container_name  = 'openvbx_container'
+        file_name       = 'install_openvbx.sh'
+        slice           =  openvbx_slice
+        content_data    =  install_openvbx_sh
         
     # associate the cloudstorage object with the openvbx script
     /orchestration/script openvbx_install_script => [openvbx_slice, openvbx_container, openvbx_install_script_object] read_or_create
-        data_uri            = 'cloudstorage://openvbx_slice/openvbx_container/install_openvbx.sh'
-        type                = _SHELL
-        encoding            = _STORAGE
+        data_uri        = 'cloudstorage://openvbx_slice/openvbx_container/install_openvbx.sh'
+        script_type     = _SHELL
+        encoding        = _STORAGE
     
     # create the recipe and associate the script
     /orchestration/recipe openvbx_install_recipe read_or_create
-        scripts             = [openvbx_install_script]
+        scripts         = [openvbx_install_script]
 
     # openvbx node
     /server/cloud openvbx_server read_or_create
-        hostname         = 'openvbx'
-        image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type             = 'CS05'
-        keys             = [openvbx_server_key, openvbx_console_key]
-        recipes          = [openvbx_install_recipe]
+        hostname        = 'openvbx'
+        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type    = 'CS05'
+        keys            = [openvbx_server_key, openvbx_console_key]
+        recipes         = [openvbx_install_recipe]
 
 text_template openvbx_result_template
 

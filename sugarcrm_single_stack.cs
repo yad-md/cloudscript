@@ -1,67 +1,66 @@
 cloudscript sugarcrm
-    version              = '2012-05-20'
-    result_template      = sugarcrm_result_template
+    version                 = '2012-05-20'
+    result_template         = sugarcrm_result_template
 
 globals
-    server_password      = lib::random_password()
-    console_password     = lib::random_password()
-    sugarcrm_db_password = lib::random_password()
-    sugarcrm_db_name     = 'sugarcrm'
-    sugarcrm_db_username = 'sugarcrm'
+    server_password         = lib::random_password()
+    console_password        = lib::random_password()
+    sugarcrm_db_password    = lib::random_password()
+    sugarcrm_db_name        = 'sugarcrm'
+    sugarcrm_db_username    = 'sugarcrm'
 
 
 thread core
-    tasks                = [install]
+    tasks                   = [install]
     
 task install
     /key/password sugarcrm_server_key read_or_create
-        key_group        = _SERVER
-        password         = server_password
+        key_group           = _SERVER
+        password            = server_password
     
     /key/password sugarcrm_console_key read_or_create
-        key_group        = _CONSOLE
-        password         = console_password
+        key_group           = _CONSOLE
+        password            = console_password
     #
     # create sugarcrm storage slice, bootstrap script and recipe
     #
     
     # storage slice key
     /key/token sugarcrm_slice_key read_or_create
-        username         = 'sugarcrmsliceuser'
+        username            = 'sugarcrmsliceuser'
 
     # slice
     /storage/slice sugarcrm_slice read_or_create
-        keys             = [sugarcrm_slice_key]
+        keys                = [sugarcrm_slice_key]
 
     # slice container
     /storage/container sugarcrm_container => [sugarcrm_slice] read_or_create
-        slice            = sugarcrm_slice
+        slice               = sugarcrm_slice
 
     # store script as object in cloudstorage
     /storage/object install_sugarcrm_script_object => [sugarcrm_slice, sugarcrm_container] read_or_create
-        container_name   = 'sugarcrm_container'
-        file_name        = 'install_sugarcrm.sh'
-        slice            =  sugarcrm_slice
-        content_data     =  install_sugarcrm_sh
+        container_name      = 'sugarcrm_container'
+        file_name           = 'install_sugarcrm.sh'
+        slice               =  sugarcrm_slice
+        content_data        =  install_sugarcrm_sh
 
     # associate the cloudstorage object with the sugarcrm script
     /orchestration/script install_sugarcrm_script => [sugarcrm_slice, sugarcrm_container, install_sugarcrm_script_object] read_or_create
-        data_uri         = 'cloudstorage://sugarcrm_slice/sugarcrm_container/install_sugarcrm.sh'
-        type             = _SHELL
-        encoding         = _STORAGE
+        data_uri            = 'cloudstorage://sugarcrm_slice/sugarcrm_container/install_sugarcrm.sh'
+        script_type         = _SHELL
+        encoding            = _STORAGE
 
     # create the recipe and associate the script
     /orchestration/recipe install_sugarcrm_recipe read_or_create
-        scripts          = [install_sugarcrm_script]
+        scripts             = [install_sugarcrm_script]
 
     # sugarcrm node
     /server/cloud sugarcrm_server read_or_create
-        hostname         = 'sugarcrm'
-        image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type             = 'CS05'
-        keys             = [sugarcrm_server_key, sugarcrm_console_key]
-        recipes          = [install_sugarcrm_recipe]
-
+        hostname            = 'sugarcrm'
+        image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type        = 'CS05'
+        keys                = [sugarcrm_server_key, sugarcrm_console_key]
+        recipes             = [install_sugarcrm_recipe]
 
 text_template sugarcrm_result_template
 

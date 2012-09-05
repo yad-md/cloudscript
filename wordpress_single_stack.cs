@@ -31,17 +31,17 @@ task wordpress_server_setup
     
     # create wordpress server root password key
     /key/password wordpress_server_password_key read_or_create
-        key_group           = _SERVER
-        password            = server_password
+        key_group               = _SERVER
+        password                = server_password
     
     # create wordpress server console key
     /key/password wordpress_server_console_key read_or_create
-        key_group           = _CONSOLE
-        password            = console_password
+        key_group               = _CONSOLE
+        password                = console_password
         
     # create storage slice keys
     /key/token wordpress_slice_key read_or_create
-        username            = wordpress_slice_user
+        username                = wordpress_slice_user
         
     #-------------------------------
     # create wordpress bootstrap 
@@ -50,39 +50,39 @@ task wordpress_server_setup
     
     # create slice to store script in cloudstorage
     /storage/slice wordpress_slice read_or_create
-        keys                = [wordpress_slice_key]
+        keys                    = [wordpress_slice_key]
     
     # create slice container to store script in cloudstorage
     /storage/container wordpress_container => [wordpress_slice] read_or_create
-        slice               = wordpress_slice
+        slice                   = wordpress_slice
     
     # place script data in cloudstorage
     /storage/object wordpress_bootstrap_object => [wordpress_slice, wordpress_container] read_or_create
-        container_name      = 'wordpress_container'
-        file_name           = 'bootstrap_wordpress.sh'
-        slice               = wordpress_slice
-        content_data        = wordpress_bootstrap_data
+        container_name          = 'wordpress_container'
+        file_name               = 'bootstrap_wordpress.sh'
+        slice                   = wordpress_slice
+        content_data            = wordpress_bootstrap_data
         
     # associate the cloudstorage object with the wordpress script
     /orchestration/script wordpress_bootstrap_script => [wordpress_slice, wordpress_container, wordpress_bootstrap_object] read_or_create
-        data_uri            = 'cloudstorage://wordpress_slice/wordpress_container/bootstrap_wordpress.sh'
-        type                = _SHELL
-        encoding            = _STORAGE
+        data_uri                = 'cloudstorage://wordpress_slice/wordpress_container/bootstrap_wordpress.sh'
+        script_type             = _SHELL
+        encoding                = _STORAGE
     
     # create the recipe and associate the script
     /orchestration/recipe wordpress_bootstrap_recipe read_or_create
-        scripts             = [wordpress_bootstrap_script]
+        scripts                 = [wordpress_bootstrap_script]
 
     #-------------------------------
     # create the wordpress server
     #-------------------------------
     
     /server/cloud wordpress_server read_or_create
-        hostname            = 'wordpress'
-        image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type                = 'CS1'
-        keys                = [wordpress_server_password_key, wordpress_server_console_key]
-        recipes             = [wordpress_bootstrap_recipe]
+        hostname                = 'wordpress'
+        image                   = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type            = 'CS1'
+        keys                    = [wordpress_server_password_key, wordpress_server_console_key]
+        recipes                 = [wordpress_bootstrap_recipe]
 
 text_template wordpress_bootstrap_data
 #!/bin/sh

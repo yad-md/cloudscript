@@ -1,14 +1,14 @@
 cloudscript openvpn_multi_stack
-    version              = '2012-05-20'
-    result_template      = openvpn_pair_result_tmpl
+    version             = '2012-05-20'
+    result_template     = openvpn_pair_result_tmpl
 
 globals
-    server_password	     = lib::random_password()
-    console_password     = lib::random_password()
-    openvpn_slice_user   = 'openvpn'
+    server_password	    = lib::random_password()
+    console_password    = lib::random_password()
+    openvpn_slice_user  = 'openvpn'
 
 thread openvpn_setup
-    tasks                = [openvpn_server_client_setup]
+    tasks               = [openvpn_server_client_setup]
     
 task openvpn_server_client_setup
 
@@ -17,17 +17,16 @@ task openvpn_server_client_setup
     #-----------------------
 
     /key/password openvpn_server_pass_key read_or_create
-        key_group        = _SERVER
-        password         = server_password
-        
-    
+        key_group       = _SERVER
+        password        = server_password
+
     /key/password openvpn_server_console_key read_or_create
-        key_group        = _CONSOLE
-        password         = console_password        
+        key_group       = _CONSOLE
+        password        = console_password        
 
     # create storage slice keys
     /key/token openvpn_slice_key read_or_create
-        username         = openvpn_slice_user
+        username        = openvpn_slice_user
 
     #-------------------------------
     # create openvpn bootstrap
@@ -35,66 +34,66 @@ task openvpn_server_client_setup
     
     # create slice to store script in cloudstorage
     /storage/slice openvpn_slice read_or_create
-        keys                = [openvpn_slice_key]
+        keys            = [openvpn_slice_key]
     
     # create slice container to store script in cloudstorage
     /storage/container openvpn_container read_or_create
-        slice               = openvpn_slice
+        slice           = openvpn_slice
     
     # place script data in cloudstorage
     /storage/object openvpn_server_script_object => [openvpn_slice] read_or_create
-        container_name      = 'openvpn_container'
-        file_name           = 'openvpn_server_script.sh'
-        slice               = openvpn_slice
-        content_data        = openvpn_server_script_tmpl
+        container_name  = 'openvpn_container'
+        file_name       = 'openvpn_server_script.sh'
+        slice           = openvpn_slice
+        content_data    = openvpn_server_script_tmpl
         
     # associate the cloudstorage object with the openvpn script
     /orchestration/script openvpn_server_script => [openvpn_slice, openvpn_container, openvpn_server_script_object] read_or_create
-        data_uri            = 'cloudstorage://openvpn_slice/openvpn_container/openvpn_server_script.sh'
-        type                = _shell
-        encoding            = _storage
+        data_uri        = 'cloudstorage://openvpn_slice/openvpn_container/openvpn_server_script.sh'
+        script_type     = _shell
+        encoding        = _storage
 
     # place script data in cloudstorage
     /storage/object openvpn_client_script_object => [openvpn_slice, openvpn_server] read_or_create
-        container_name      = 'openvpn_container'
-        file_name           = 'openvpn_client_script.sh'
-        slice               = openvpn_slice
-        content_data        = openvpn_client_script_tmpl
-        b64decode           = 0
+        container_name  = 'openvpn_container'
+        file_name       = 'openvpn_client_script.sh'
+        slice           = openvpn_slice
+        content_data    = openvpn_client_script_tmpl
+        b64decode       = 0
         
     # associate the cloudstorage object with the openvpn script
     /orchestration/script openvpn_client_script => [openvpn_slice, openvpn_container, openvpn_client_script_object] read_or_create
-        data_uri            = 'cloudstorage://openvpn_slice/openvpn_container/openvpn_client_script.sh'
-        type                = _shell
-        encoding            = _storage
+        data_uri        = 'cloudstorage://openvpn_slice/openvpn_container/openvpn_client_script.sh'
+        script_type     = _shell
+        encoding        = _storage
     
     #-------------------------------
     # create openvpn server recipe
     #-------------------------------
     
     /orchestration/recipe openvpn_server_recipe read_or_create
-        scripts             = [openvpn_server_script]
+        scripts         = [openvpn_server_script]
 
     /orchestration/recipe openvpn_client_recipe read_or_create
-        scripts             = [openvpn_client_script]
+        scripts         = [openvpn_client_script]
 
     #-----------------------
     # Cloud Servers
     #-----------------------
 
     /server/cloud openvpn_server read_or_create
-        hostname         = 'openvpn-server'
-        image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type             = 'CS1'
-        keys             = [openvpn_server_pass_key, openvpn_server_console_key]
-        recipes          = [openvpn_server_recipe]
+        hostname        = 'openvpn-server'
+        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type    = 'CS1'
+        keys            = [openvpn_server_pass_key, openvpn_server_console_key]
+        recipes         = [openvpn_server_recipe]
 
     /server/cloud openvpn_client read_or_create
-        hostname         = 'openvpn-client'
-        image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type             = 'CS1'
-        keys             = [openvpn_server_pass_key, openvpn_server_console_key]
-        recipes          = [openvpn_client_recipe]
+        hostname        = 'openvpn-client'
+        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type    = 'CS1'
+        keys            = [openvpn_server_pass_key, openvpn_server_console_key]
+        recipes         = [openvpn_client_recipe]
 
 text_template openvpn_pair_result_tmpl
 

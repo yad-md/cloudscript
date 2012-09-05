@@ -54,7 +54,7 @@ task joomla_server_setup
     # associate the cloudstorage object with the joomla script
     /orchestration/script joomla_bootstrap_script => [joomla_slice, joomla_container, joomla_bootstrap_object] read_or_create
         data_uri            = 'cloudstorage://joomla_slice/joomla_container/bootstrap_joomla.sh'
-        type                = _SHELL
+        script_type         = _SHELL
         encoding            = _STORAGE
     
     # create the recipe and associate the script
@@ -68,7 +68,7 @@ task joomla_server_setup
     /server/cloud joomla_server read_or_create
         hostname            = 'joomla'
         image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type                = 'CS1'
+        service_type        = 'CS1'
         keys                = [joomla_server_password_key, joomla_server_console_key]
         recipes             = [joomla_bootstrap_recipe]
 

@@ -1,14 +1,14 @@
 cloudscript hadoop_single_node
-    version                 = '2012-05-20'  
-    result_template         = hadoop_result_template
+    version             = '2012-05-20'  
+    result_template     = hadoop_result_template
 
 globals
     server_password	    = lib::random_password()
-    console_password        = lib::random_password()
-    hadoop_slice_user       = 'hadoop'
+    console_password    = lib::random_password()
+    hadoop_slice_user   = 'hadoop'
     
 thread hadoop_setup
-    tasks                   = [hadoop_node_setup]
+    tasks               = [hadoop_node_setup]
 
 task hadoop_node_setup
 
@@ -18,17 +18,17 @@ task hadoop_node_setup
     
     # create hadoop server root password key
     /key/password hadoop_server_password_key read_or_create
-        key_group           = _SERVER
-        password            = server_password
+        key_group       = _SERVER
+        password        = server_password
     
     # create hadoop server console key
     /key/password hadoop_server_console_key read_or_create
-        key_group           = _CONSOLE
-        password            = console_password
+        key_group       = _CONSOLE
+        password        = console_password
         
     # create storage slice keys
     /key/token hadoop_slice_key read_or_create
-        username            = hadoop_slice_user  
+        username        = hadoop_slice_user  
         
     #-------------------------------
     # create hadoop bootstrap 
@@ -37,7 +37,7 @@ task hadoop_node_setup
     
     # create slice to store script in cloudstorage
     /storage/slice hadoop_slice read_or_create
-        keys                = [hadoop_slice_key]
+        keys            = [hadoop_slice_key]
     
     # create slice container to store script in cloudstorage
     /storage/container hadoop_container => [hadoop_slice] read_or_create
@@ -45,31 +45,31 @@ task hadoop_node_setup
     
     # place script data in cloudstorage
     /storage/object hadoop_bootstrap_object => [hadoop_slice, hadoop_container] read_or_create
-        container_name      = 'hadoop_container'
-        file_name           = 'bootstrap_hadoop.sh'
-        slice               = hadoop_slice
-        content_data        = hadoop_bootstrap_data
+        container_name  = 'hadoop_container'
+        file_name       = 'bootstrap_hadoop.sh'
+        slice           = hadoop_slice
+        content_data    = hadoop_bootstrap_data
         
     # associate the cloudstorage object with the hadoop script
     /orchestration/script hadoop_bootstrap_script => [hadoop_slice, hadoop_container, hadoop_bootstrap_object] read_or_create
-        data_uri            = 'cloudstorage://hadoop_slice/hadoop_container/bootstrap_hadoop.sh'
-        type                = _SHELL
-        encoding            = _STORAGE
+        data_uri        = 'cloudstorage://hadoop_slice/hadoop_container/bootstrap_hadoop.sh'
+        script_type     = _SHELL
+        encoding        = _STORAGE
     
     # create the recipe and associate the script
     /orchestration/recipe hadoop_bootstrap_recipe read_or_create
-        scripts             = [hadoop_bootstrap_script]
+        scripts         = [hadoop_bootstrap_script]
 
     #-------------------------------
     # create the hadoop node
     #-------------------------------
     
     /server/cloud hadoop_server read_or_create
-        hostname            = 'hadoop'
-        image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type                = 'CS2.1'
-        keys                = [hadoop_server_password_key, hadoop_server_console_key]
-        recipes             = [hadoop_bootstrap_recipe]
+        hostname        = 'hadoop'
+        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type    = 'CS2.1'
+        keys            = [hadoop_server_password_key, hadoop_server_console_key]
+        recipes         = [hadoop_bootstrap_recipe]
 
 text_template hadoop_bootstrap_data
 #!/bin/sh

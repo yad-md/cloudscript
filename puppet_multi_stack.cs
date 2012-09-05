@@ -1,14 +1,14 @@
 cloudscript puppet_multi_stack
-    version              = '2012-05-20'
-    result_template      = puppet_pair_result_tmpl
+    version             = '2012-05-20'
+    result_template     = puppet_pair_result_tmpl
 
 globals
-    server_password	     = lib::random_password()
-    console_password     = lib::random_password()
-    puppet_slice_user    = 'puppet'
+    server_password     = lib::random_password()
+    console_password    = lib::random_password()
+    puppet_slice_user   = 'puppet'
 
 thread puppet_setup
-    tasks                = [puppet_master_agent_setup]
+    tasks               = [puppet_master_agent_setup]
     
 task puppet_master_agent_setup
 
@@ -17,16 +17,16 @@ task puppet_master_agent_setup
     #-----------------------
 
     /key/password puppet_server_pass_key read_or_create
-        key_group        = _SERVER
-        password         = server_password        
+        key_group       = _SERVER
+        password        = server_password        
     
     /key/password puppet_server_console_key read_or_create
-        key_group        = _CONSOLE
-        password         = console_password        
+        key_group       = _CONSOLE
+        password        = console_password        
 
     # create storage slice keys
     /key/token puppet_slice_key read_or_create
-        username         = puppet_slice_user   
+        username        = puppet_slice_user   
 
     #-------------------------------
     # create puppet bootstrap
@@ -34,65 +34,65 @@ task puppet_master_agent_setup
     
     # create slice to store script in cloudstorage
     /storage/slice puppet_slice read_or_create
-        keys                = [puppet_slice_key]
+        keys            = [puppet_slice_key]
     
     # create slice container to store script in cloudstorage
     /storage/container puppet_container read_or_create
-        slice               = puppet_slice
+        slice           = puppet_slice
     
     # place script data in cloudstorage
     /storage/object puppet_master_script_object => [puppet_slice] read_or_create
-        container_name      = 'puppet_container'
-        file_name           = 'puppet_master_script.sh'
-        slice               = puppet_slice
-        content_data        = puppet_master_script_tmpl
+        container_name  = 'puppet_container'
+        file_name       = 'puppet_master_script.sh'
+        slice           = puppet_slice
+        content_data    = puppet_master_script_tmpl
         
     # associate the cloudstorage object with the puppet script
     /orchestration/script puppet_master_script => [puppet_slice, puppet_container, puppet_master_script_object] read_or_create
-        data_uri            = 'cloudstorage://puppet_slice/puppet_container/puppet_master_script.sh'
-        type                = _shell
-        encoding            = _storage
+        data_uri        = 'cloudstorage://puppet_slice/puppet_container/puppet_master_script.sh'
+        script_type     = _shell
+        encoding        = _storage
 
     # place script data in cloudstorage
     /storage/object puppet_agent_script_object => [puppet_master_server, puppet_slice] read_or_create
-        container_name      = 'puppet_container'
-        file_name           = 'puppet_agent_script.sh'
-        slice               = puppet_slice
-        content_data        = puppet_agent_script_tmpl
+        container_name  = 'puppet_container'
+        file_name       = 'puppet_agent_script.sh'
+        slice           = puppet_slice
+        content_data    = puppet_agent_script_tmpl
         
     # associate the cloudstorage object with the puppet script
     /orchestration/script puppet_agent_script => [puppet_slice, puppet_container, puppet_agent_script_object] read_or_create
-        data_uri            = 'cloudstorage://puppet_slice/puppet_container/puppet_agent_script.sh'
-        type                = _shell
-        encoding            = _storage
+        data_uri        = 'cloudstorage://puppet_slice/puppet_container/puppet_agent_script.sh'
+        script_type     = _shell
+        encoding        = _storage
     
     #-------------------------------
     # create puppet master recipe
     #-------------------------------
     
     /orchestration/recipe puppet_master_recipe read_or_create
-        scripts             = [puppet_master_script]
+        scripts         = [puppet_master_script]
 
     /orchestration/recipe puppet_agent_recipe read_or_create
-        scripts             = [puppet_agent_script]
+        scripts         = [puppet_agent_script]
 
     #-----------------------
     # Cloud Servers
     #-----------------------
 
     /server/cloud puppet_master_server read_or_create
-        hostname         = 'puppet-master'
-        image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type             = 'CS1'
-        keys             = [puppet_server_pass_key, puppet_server_console_key]
-        recipes          = [puppet_master_recipe]
+        hostname        = 'puppet-master'
+        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type    = 'CS1'
+        keys            = [puppet_server_pass_key, puppet_server_console_key]
+        recipes         = [puppet_master_recipe]
 
     /server/cloud puppet_agent_server read_or_create
-        hostname         = 'puppet-agent'
-        image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type             = 'CS1'
-        keys             = [puppet_server_pass_key, puppet_server_console_key]
-        recipes          = [puppet_agent_recipe]
+        hostname        = 'puppet-agent'
+        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type    = 'CS1'
+        keys            = [puppet_server_pass_key, puppet_server_console_key]
+        recipes         = [puppet_agent_recipe]
 
 text_template puppet_agent_script_tmpl
 #!/bin/bash

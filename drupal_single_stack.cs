@@ -28,40 +28,40 @@ task config
     
     # storage slice key
     /key/token drupal_slice_key read_or_create
-        username            = drupal_slice_user
+        username        = drupal_slice_user
 
     # slice
     /storage/slice drupal_slice read_or_create
-        keys                = [drupal_slice_key]
+        keys            = [drupal_slice_key]
     
     # slice container
     /storage/container drupal_container => [drupal_slice] read_or_create
-        slice               = drupal_slice
+        slice           = drupal_slice
     
     # store script as object in cloudstorage
     /storage/object drupal_install_script_object => [drupal_slice, drupal_container] read_or_create
-        container_name      = 'drupal_container'
-        file_name           = 'install_drupal.sh'
-        slice               =  drupal_slice
-        content_data        =  install_drupal_sh
+        container_name  = 'drupal_container'
+        file_name       = 'install_drupal.sh'
+        slice           =  drupal_slice
+        content_data    =  install_drupal_sh
         
     # associate the cloudstorage object with the drupal script
     /orchestration/script drupal_install_script => [drupal_slice, drupal_container, drupal_install_script_object] read_or_create
-        data_uri            = 'cloudstorage://drupal_slice/drupal_container/install_drupal.sh'
-        type                = _SHELL
-        encoding            = _STORAGE
+        data_uri        = 'cloudstorage://drupal_slice/drupal_container/install_drupal.sh'
+        script_type     = _SHELL
+        encoding        = _STORAGE
     
     # create the recipe and associate the script
     /orchestration/recipe drupal_install_recipe read_or_create
-        scripts             = [drupal_install_script]
+        scripts         = [drupal_install_script]
 
     # drupal node
     /server/cloud drupal_server read_or_create
-        hostname         = 'drupal'
-        image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type             = 'CS05'
-        keys             = [drupal_server_key, drupal_console_key]
-        recipes          = [drupal_install_recipe]
+        hostname        = 'drupal'
+        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
+        service_type    = 'CS05'
+        keys            = [drupal_server_key, drupal_console_key]
+        recipes         = [drupal_install_recipe]
 
 text_template drupal_result_template
 
