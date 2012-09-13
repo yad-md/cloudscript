@@ -47,7 +47,7 @@ task install
     # associate the cloudstorage object with the phpbb script
     /orchestration/script install_phpbb_script => [phpbb_slice, phpbb_container, install_phpbb_script_object] read_or_create
         data_uri         = 'cloudstorage://phpbb_slice/phpbb_container/install_phpbb.sh'
-        type             = _SHELL
+        script_type      = _SHELL
         encoding         = _STORAGE
 
     # create the recipe and associate the script
@@ -58,7 +58,7 @@ task install
     /server/cloud phpbb_server read_or_create
         hostname         = 'phpbb'
         image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        type             = 'CS05'
+        service_type     = 'CS05'
         keys             = [phpbb_server_key, phpbb_console_key]
         recipes          = [install_phpbb_recipe]
 
