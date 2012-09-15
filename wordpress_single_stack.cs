@@ -172,9 +172,12 @@ if ( !defined('ABSPATH') )
 require_once(ABSPATH . 'wp-settings.php');
 EOF
 
-rm /var/www/index.html
+# move temporary wordpress install into '/'
+mv /var/www/wordpress/* /var/www
+rmdir /var/www/wordpress
 
-echo "Your wordpress site is ready: <a href='/wordpress/'>click here</a>" > /var/www/index.html
+# remove temporary index.html giving way to index.php
+rm -rf /var/www/index.html
 
 _eof
 
