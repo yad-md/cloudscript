@@ -143,7 +143,7 @@ sed 's/^upload_max_filesize.*/upload_max_filesize = 10M/g' -i /etc/php5/apache2/
 a2enmod php5 > /dev/null
 
 # download sugarcrm source
-cd /var/www && wget -O sugarce.zip "http://downloads.sourceforge.net/project/sugarcrm/1%20-%20SugarCRM%206.5.X/SugarCommunityEdition-6.5.X/SugarCE-6.5.4.zip?r=http%3A%2F%2Fsourceforge.net%2Fprojects%2Fsugarcrm%2Ffiles%2F1%2520-%2520SugarCRM%25206.5.X%2F&ts=1346150021&use_mirror=heanet" > /dev/null 2>&1
+cd /var/www && wget -O sugarce.zip "http://sourceforge.net/projects/sugarcrm/files/1%20-%20SugarCRM%206.5.X/SugarCommunityEdition-6.5.X/SugarCE-6.5.11.zip/download" > /dev/null 2>&1
 [ $? -eq 0 ] && echo "OK: download sugarcrm source" || {
     echo "ERROR: download sugarcrm source"
     exit 1
