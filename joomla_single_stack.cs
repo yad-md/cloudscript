@@ -1,5 +1,5 @@
 cloudscript joomla_single_stack
-    version                 = '2012-05-20'  
+    version                 = _latest  
     result_template         = joomla_result_template
 
 globals

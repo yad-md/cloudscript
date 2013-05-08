@@ -1,5 +1,5 @@
 cloudscript openvbx_single_stack
-    version              = '2012-05-20'
+    version              = _latest
     result_template      = openvbx_result_template  
 
 globals

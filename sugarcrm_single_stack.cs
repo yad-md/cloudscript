@@ -1,5 +1,5 @@
 cloudscript sugarcrm
-    version                 = '2012-05-20'
+    version                 = _latest
     result_template         = sugarcrm_result_template
 
 globals
