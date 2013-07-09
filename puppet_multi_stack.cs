@@ -1,5 +1,5 @@
 cloudscript puppet_multi_stack
-    version             = '2012-05-20'
+    version             = _latest
     result_template     = puppet_pair_result_tmpl
 
 globals

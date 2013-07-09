@@ -1,5 +1,5 @@
 cloudscript wordpress_single_stack
-    version                     = '2012-05-20'  
+    version                     = _latest  
     result_template             = wordpress_result_template
 
 globals

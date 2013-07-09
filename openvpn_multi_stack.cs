@@ -1,5 +1,5 @@
 cloudscript openvpn_multi_stack
-    version             = '2012-05-20'
+    version             = _latest
     result_template     = openvpn_pair_result_tmpl
 
 globals

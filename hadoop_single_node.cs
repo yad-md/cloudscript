@@ -1,5 +1,5 @@
 cloudscript hadoop_single_node
-    version             = '2012-05-20'  
+    version             = _latest  
     result_template     = hadoop_result_template
 
 globals
