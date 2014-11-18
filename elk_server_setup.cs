@@ -103,6 +103,12 @@ fi
 # Get latest package list
 yum --quiet --assumeyes update
 
+# Install wget
+yum --quiet --assumeyes install wget
+
+# Install iptable services
+yum --quiet --assumeyes install iptables-services
+
 # Install httpd
 yum --quiet --assumeyes install httpd
 
@@ -118,12 +124,12 @@ tar -xf {{ elasticsearch_version }}.tar.gz
 ln -s /opt/{{ elasticsearch_version }} /opt/elasticsearch
 
 # Start up Elasticsearch in the background
-/opt/elasticsearch_version/bin/elasticsearch -d
+/opt/{{ elasticsearch_version }}/bin/elasticsearch -d
 
 # Install and setup Logstash
 cd /opt/
 wget https://download.elasticsearch.org/logstash/logstash/{{ logstash_version }}.tar.gz
-tar -xf logstash-{{ logstash_version }}.tar.gz
+tar -xf {{ logstash_version }}.tar.gz
 ln -s /opt/{{ logstash_version }} /opt/logstash
 
 # Prepare a logstash.conf file for Apache logs
@@ -159,11 +165,27 @@ EOF
 # Install and setup Kibana
 cd /opt/
 wget https://download.elasticsearch.org/kibana/kibana/{{ kibana_version }}.tar.gz
-tar -xf kibana-{{ kibana_version }}.tar.gz
+tar -xf {{ kibana_version }}.tar.gz
 
 #  Copy the contents of the extracted directory to your webserver root directory
 cp -R /opt/{{ kibana_version }/* /var/www/html
 chown -R apache:apache /var/www/html
+
+# change kibana conf
+sed -r 's@ elasticsearch:.*@ elasticsearch: "http://{{ hostname }}:9200",@g' /var/www/html/config.js  > /var/www/html/config_new.js
+mv /var/www/html/config_new.js /var/www/html/config.js
+
+# add firewall rules and restart iptables
+iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 9200 -j ACCEPT
+iptables-save > /etc/sysconfig/iptables
+service iptables restart
+
+# add firewall rules in startup script
+echo "iptables-restore < /etc/sysconfig/iptables" >> /etc/rc.local
+
+# start httpd
+service httpd start
 
 _eof
 
