@@ -1,6 +1,6 @@
 # Cloudscript for an Elasticsearch + Logstash + Kibana server
 cloudscript elk_single_stack
-    version                     = '2014_09_18'
+    version                     = '2014_12_08'
     result_template             = elk_result_template
 
 globals
@@ -11,7 +11,7 @@ globals
     elk_slice_user              = 'elk'
     # !!! Set elk version variables to latest versions        !!!
     # !!! http://www.elasticsearch.org/overview/elkdownloads/ !!!
-    elasticsearch_version       = 'elasticsearch-1.3.2'
+    elasticsearch_version       = 'elasticsearch-1.4.1'
     logstash_version            = 'logstash-1.4.2'
     kibana_version              = 'kibana-3.1.0'
     # Password setup
@@ -123,8 +123,11 @@ wget https://download.elasticsearch.org/elasticsearch/elasticsearch/{{ elasticse
 tar -xf {{ elasticsearch_version }}.tar.gz
 ln -s /opt/{{ elasticsearch_version }} /opt/elasticsearch
 
+#Modify Elasticsearch config
+echo "http.cors.enabled: true" >> /opt/elasticsearch/config/elasticsearch.yml
+
 # Start up Elasticsearch in the background
-/opt/{{ elasticsearch_version }}/bin/elasticsearch -d
+/opt/elasticsearch/bin/elasticsearch -d
 
 # Install and setup Logstash
 cd /opt/
@@ -138,6 +141,7 @@ input {
   file {
     path => "/tmp/access_log"
     start_position => beginning
+    sincedb_path => "/opt/logstash/sincedb.log"
   }
 }
 filter {
@@ -159,8 +163,8 @@ output {
 }
 EOF
 
-# Run Logstash with the new conf file in the background
-/opt/logstash/bin/logstash agent -f /opt/logstash/logstash.conf -l /opt/logstash/logstash.log &
+#Start logstash
+nohup /bin/bash /opt/logstash/bin/logstash agent -f /opt/logstash/logstash.conf -l /opt/logstash/logstash.log > /dev/null 2>&1 &
 
 # Install and setup Kibana
 cd /opt/
@@ -168,43 +172,37 @@ wget https://download.elasticsearch.org/kibana/kibana/{{ kibana_version }}.tar.g
 tar -xf {{ kibana_version }}.tar.gz
 
 #  Copy the contents of the extracted directory to your webserver root directory
-cp -R /opt/{{ kibana_version }/* /var/www/html
+cp -R /opt/{{ kibana_version }}/* /var/www/html
 chown -R apache:apache /var/www/html
 
-# change kibana conf
-sed -r 's@ elasticsearch:.*@ elasticsearch: "http://{{ hostname }}:9200",@g' /var/www/html/config.js  > /var/www/html/config_new.js
+# change kibana conf 
+sed -r 's@ elasticsearch:.*@ elasticsearch: "http://"+window.location.hostname+":9200",@g' /var/www/html/config.js  > /var/www/html/config_new.js
 mv /var/www/html/config_new.js /var/www/html/config.js
 
 # add firewall rules and restart iptables
-iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT
-iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 9200 -j ACCEPT
-iptables-save > /etc/sysconfig/iptables
+NUM = iptables -L INPUT --line-numbers | tail -n1 |cut -c 1
+iptables -I INPUT $NUM -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT
+iptables -I INPUT $NUM -m state --state NEW -m tcp -p tcp --dport 9200 -j ACCEPT
+service iptables save
 service iptables restart
 
-# add firewall rules in startup script
-echo "iptables-restore < /etc/sysconfig/iptables" >> /etc/rc.local
-
 # start httpd
+chkconfig --level 2345 httpd on
 service httpd start
+
+#autostart elasticsearch
+echo '/opt/elasticsearch/bin/elasticsearch -d' >> /etc/rc.local.orig
+echo '/bin/bash /opt/logstash/bin/logstash agent -f /opt/logstash/logstash.conf -l /opt/logstash/logstash.log &' >> /etc/rc.local.orig
+chmod +x /etc/rc.local.orig
 
 _eof
 
 text_template elk_result_template
 
-Your Elasticsearch + Logstash + Kibana setup is ready at the following IP address:
+Your Elasticsearch + Logstash + Kibana is ready at the following IP address:
 
 http://{{ elk_server.ipaddress_public }}/
 
-To do:
-1. Edit /var/www/kibana/config.js and set the elasticsearch parameter to 
-   the fully qualified hostname of your Elasticsearch server*
-2. Edit /etc/sysconfig/iptables to allow port 80 and 9200
-   -A INPUT -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT
-   -A INPUT -m state --state NEW -m tcp -p tcp --dport 9200 -j ACCEPT
-3. Restart iptables
-   $> /etc/init.d/iptables restart
-4. Start httpd
-   $> /etc/init.d/httpd start
-5. Go to your server address and read the Kibana dashboard for further instructions
+Go to your server address and read the Kibana dashboard for further instructions
 
 _eof
