@@ -3,7 +3,10 @@ cloudscript wordpress_single_stack
     result_template             = wordpress_result_template
 
 globals
-    server_password	            = lib::random_password()
+    wp_image_type               = 'Ubuntu Server 14.04 LTS'
+    wp_instance_type            = 'CS1'
+    wp_hostname                 = 'wordpress'
+    server_password	        = lib::random_password()
     console_password            = lib::random_password()
     mysql_root_password         = lib::random_password()
     wordpress_admin_password    = lib::random_password()
@@ -78,9 +81,9 @@ task wordpress_server_setup
     #-------------------------------
     
     /server/cloud wordpress_server read_or_create
-        hostname                = 'wordpress'
-        image                   = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type            = 'CS1'
+        hostname                = '{{ wp_hostname }}'
+        image                   = '{{ wp_image_type }}'
+        service_type            = '{{ wp_instance_type }}'
         keys                    = [wordpress_server_password_key, wordpress_server_console_key]
         recipes                 = [wordpress_bootstrap_recipe]
 
@@ -113,8 +116,10 @@ apt-get -y install mysql-server
 apt-get -y install libapache2-mod-php5
 apt-get -y install php5-mysql
 
-# restart apache to use the modules
-/etc/init.d/apache2 restart
+# Change apache config & restart apache to use the modules
+sed -r 's@DocumentRoot /var/www/html@DocumentRoot /var/www@g'/etc/apache2/sites-available/000-default.conf > /etc/apache2/sites-available/111-default.conf
+mv /etc/apache2/sites-available/111-default.conf /etc/apache2/sites-available/000-default.conf
+service apache2 restart
 
 # download wordpress
 wget -O /tmp/latest.tgz http://wordpress.org/latest.tar.gz
