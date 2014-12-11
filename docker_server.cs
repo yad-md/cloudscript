@@ -1,0 +1,122 @@
+# Cloudscript for Docker latest version server
+cloudscript docker
+    version                     = '2014_12_11'
+    result_template             = docker_result_template
+
+globals
+    docker_hostname                = 'docker'
+    docker_instance_type           = 'CS1' # 1Gb, 1 core, 25Gb, 1Gbps
+    docker_image_type              = 'Ubuntu Server 14.04 LTS'
+    docker_slice_user              = 'docker'
+    # Password setup
+    server_password             = lib::random_password()
+    console_password            = lib::random_password()
+
+thread elk_setup
+    tasks                       = [docker_server_setup]
+
+task docker_server_setup
+
+    #
+    # Create docker keys
+    #
+
+    # Create docker server root password key
+    /key/password docker_server_password_key read_or_create
+        key_group               = _SERVER
+        password                = server_password
+
+    # Create docker server console key
+
+    /key/password docker_server_console_key read_or_create
+        key_group               = _CONSOLE
+        password                = console_password
+
+    #
+    # Create docker storage slice, bootstrap script and recipe
+    #
+
+    # Create storage slice keys
+    /key/token docker_slice_key read_or_create
+        username                = docker_slice_user
+
+    # Create slice to store script in cloudstorage
+
+    /storage/slice docker_slice read_or_create
+        keys                    = [docker_slice_key]
+
+    # Create slice container to store script in cloudstorage
+
+    /storage/container docker_container => [docker_slice] read_or_create
+        slice                   = docker_slice
+
+    # Place script data in cloudstorage
+
+    /storage/object docker_bootstrap_object => [docker_slice, docker_container] read_or_create
+        container_name          = 'docker_container'
+        file_name               = 'bootstrap_docker.sh'
+        slice                   = docker_slice
+        content_data            = docker_bootstrap_data
+
+    # Associate the cloudstorage object with the docker script
+
+    /orchestration/script docker_bootstrap_script => [docker_slice, docker_container, docker_bootstrap_object] read_or_create
+        data_uri                = 'cloudstorage://docker_slice/docker_container/bootstrap_docker.sh'
+        script_type             = _SHELL
+        encoding                = _STORAGE
+
+    # Create the recipe and associate the script
+
+    /orchestration/recipe docker_bootstrap_recipe read_or_create
+        scripts                 = [docker_bootstrap_script]
+
+    #
+    # Create the docker server
+    #
+
+    /server/cloud docker_server read_or_create
+        hostname                = '{{ docker_hostname }}'
+        image                   = '{{ docker_image_type }}'
+        service_type            = '{{ docker_instance_type }}'
+        keys                    = [docker_server_password_key, docker_server_console_key]
+        recipes                 = [docker_bootstrap_recipe]
+
+text_template docker_bootstrap_data
+#!/bin/sh
+
+# check if running as root
+[ `whoami` = 'root' ] || {
+    echo "ERROR: must have root permissions to execute the commands"
+    exit 1
+}
+
+#Do apt work with HTTPS?
+[ -e /usr/lib/apt/methods/https ] || {
+    apt-get update
+    apt-get install apt-transport-https -y
+}
+
+#Add key and docker repo
+apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 36A1D7869245C8950F966E92D8576A8BA88D21E9
+echo "deb https://get.docker.com/ubuntu docker main" > /etc/apt/sources.list.d/docker.list
+
+#check new repo and install docker
+apt-get update
+apt-get install lxc-docker -y
+apt-get install lxc -y
+
+#Prepare docker config
+echo 'DOCKER_OPTS="--bip=172.17.42.1/26"' >> /etc/default/docker
+service docker stop
+ip link delete docker0
+service docker start
+
+_eof
+
+text_template docker_result_template
+
+Your Docker server is ready at the following IP address:
+
+{{ docker_server.ipaddress_public }}
+
+_eof
