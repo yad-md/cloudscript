@@ -12,7 +12,7 @@ globals
     server_password             = lib::random_password()
     console_password            = lib::random_password()
 
-thread elk_setup
+thread docker_setup
     tasks                       = [docker_server_setup]
 
 task docker_server_setup
