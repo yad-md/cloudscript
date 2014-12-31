@@ -1,8 +1,12 @@
+# Install Joomla 3.3.6 on a CS1-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript joomla_single_stack
-    version                 = _latest  
+    version                 = _latest
     result_template         = joomla_result_template
 
 globals
+    joomla_hostname         = 'joomla'
+    joomla_image_type       = 'Ubuntu Server 14.04 LTS'
+    joomla_instance_type    = 'CS1-SSD'	# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
     mysql_root_password     = lib::random_password()
     joomla_admin_password   = lib::random_password()
     joomla_slice_user       = 'joomla'
@@ -15,9 +19,9 @@ thread joomla_setup
 
 task joomla_server_setup
 
-    #-------------------------------
-    # create joomla server keys
-    #-------------------------------
+    #--------------------
+    # create joomla keys
+    #--------------------
     
     # create joomla server root password key
     /key/password joomla_server_password_key read_or_create
@@ -31,10 +35,10 @@ task joomla_server_setup
     /key/token joomla_slice_key read_or_create
         username            = joomla_slice_user
 
-    #-------------------------------
+    #-------------------------
     # create joomla bootstrap 
     # script and recipe
-    #-------------------------------
+    #-------------------------
     
     # create slice to store script in cloudstorage
     /storage/slice joomla_slice read_or_create
@@ -61,14 +65,15 @@ task joomla_server_setup
     /orchestration/recipe joomla_bootstrap_recipe read_or_create
         scripts             = [joomla_bootstrap_script]
 
-    #-------------------------------
-    # create the joomla server
-    #-------------------------------
+    #----------------------
+    # create joomla server
+    #----------------------
     
-    /server/cloud joomla_server read_or_create
-        hostname            = 'joomla'
-        image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type        = 'CS1'
+    # create a new instance of joomla every time the cloudscript is run
+    /server/cloud joomla_server create_enumerate
+        hostname            = '{{ joomla_hostname }}'
+        image               = '{{ joomla_image_type }}'
+        service_type        = '{{ joomla_instance_type }}'
         keys                = [joomla_server_password_key, joomla_server_console_key]
         recipes             = [joomla_bootstrap_recipe]
 
@@ -86,12 +91,12 @@ apt-get update
 apt-get install -y apache2
 
 # let the user know joomla is coming
-echo "Joomla is installing, please wait..." > /var/www/index.html
+echo "Joomla is installing, please wait..." > /var/www/html/index.html
 
 # prepare mysql preseed
-echo "mysql-server-5.1 mysql-server/root_password password {{ mysql_root_password }}" > mysql.preseed
-echo "mysql-server-5.1 mysql-server/root_password_again password {{ mysql_root_password }}" >> mysql.preseed
-echo "mysql-server-5.1 mysql-server/start_on_boot boolean true" >> mysql.preseed
+echo "mysql-server-5.5 mysql-server/root_password password {{ mysql_root_password }}" > mysql.preseed
+echo "mysql-server-5.5 mysql-server/root_password_again password {{ mysql_root_password }}" >> mysql.preseed
+echo "mysql-server-5.5 mysql-server/start_on_boot boolean true" >> mysql.preseed
 cat mysql.preseed | sudo debconf-set-selections
 rm mysql.preseed
 
@@ -101,18 +106,18 @@ apt-get -y install libapache2-mod-php5
 apt-get -y install php5-mysql
 
 # restart apache to use the modules
-/etc/init.d/apache2 restart
+service apache2 restart
 
 # get and install zip
 apt-get -y install unzip
 
 # download wordpress
-wget -q -O /tmp/latest.zip http://joomlacode.org/gf/download/frsrelease/15900/68956/Joomla_1.7.2-Stable-Full_Package.zip
+wget -q -O /tmp/latest.zip https://github.com/joomla/joomla-cms/releases/download/3.3.6/Joomla_3.3.6-Stable-Full_Package.zip
 
 # extract it and fix permissions
-cd /var/www
+cd /var/www/html/
 unzip /tmp/latest.zip > /dev/null
-chown -R www-data:www-data /var/www
+chown -R www-data:www-data /var/www/html/
 
 #-------------------------
 # Set MySQL Permissions
@@ -138,11 +143,11 @@ mysql --user=root --password='{{ mysql_root_password }}' < /tmp/setup.mysql
 
 # create joomla sql config
 echo "Create joomla sql config"
-sed -e 's/#__/jos_/g' < /var/www/installation/sql/mysql/joomla.sql > /var/www/joomla.sql
+sed -e 's/#__/jos_/g' < /var/www/html/installation/sql/mysql/joomla.sql > /var/www/html/joomla.sql
 
 # run joomla sql config
 echo "Load joomla sql config"
-mysql {{ joomla_db_name }} --user="{{ joomla_db_username }}" --password="{{ joomla_db_password }}" < /var/www/joomla.sql
+mysql {{ joomla_db_name }} --user="{{ joomla_db_username }}" --password="{{ joomla_db_password }}" < /var/www/html/joomla.sql
 
 # create joomla accounts
 echo "Create joomla sql accounts"
@@ -158,7 +163,7 @@ sed -e "s/\$user = ''/\$user = '{{ joomla_db_username }}'/g" \
     -e "s/\$password = ''/\$password = '{{ joomla_db_password }}'/g" \
     -e "s/\$db = ''/\$db = '{{ joomla_db_name }}'/g" \
     -e "s/\$live_site = 'joomla'/\$live_site = ''/g" \
-    < /var/www/installation/configuration.php-dist > /var/www/configuration.php
+    < /var/www/html/installation/configuration.php-dist > /var/www/html/configuration.php
 
 #-----------------------------
 # Cleanup
@@ -169,9 +174,9 @@ echo "Doing cleanup"
 # cleanup setup files
 rm -f /tmp/setup.mysql
 rm -f /tmp/create_accounts.mysql
-rm -f /var/www/joomla.sql
-rm -Rf /var/www/installation
-rm -rf /var/www/index.html
+rm -f /var/www/html/joomla.sql
+rm -Rf /var/www/html/installation
+rm -rf /var/www/html/index.html
 _eof
 
 text_template joomla_result_template
@@ -183,7 +188,7 @@ http://{{ joomla_server.ipaddress_public }}/administrator
 
 You can login with the username 'admin' using the 
 password '{{ joomla_admin_password }}'.  You can also 
-visit  your public Joomla site at the following URL:
+visit your public Joomla site at the following URL:
 
 http://{{ joomla_server.ipaddress_public }}
 
