@@ -24,11 +24,11 @@ task puppet_master_agent_setup
 
     /key/password puppet_server_pass_key read_or_create
         key_group       = _SERVER
-        password        = server_password        
+        password        = server_password
     
     /key/password puppet_server_console_key read_or_create
         key_group       = _CONSOLE
-        password        = console_password        
+        password        = console_password
 
     # create storage slice keys
     /key/token puppet_slice_key read_or_create

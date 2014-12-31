@@ -5,10 +5,10 @@ cloudscript elk_single_stack
 
 globals
     elk_hostname            = 'elk'
-    elk_instance_type       = 'CS2.2-SSD'	# 2GB RAM, 2 vCore(s), 50GB SSD, 10Gbps
+    elk_instance_type       = 'CS2.2-SSD'    # 2GB RAM, 2 vCore(s), 50GB SSD, 10Gbps
     elk_image_type          = 'Linux CentOS 6.5 64-bit'
     elk_slice_user          = 'elk'
-    elasticsearch_version	= 'elasticsearch-1.4.2'
+    elasticsearch_version   = 'elasticsearch-1.4.2'
     logstash_version        = 'logstash-1.4.2'
     kibana_version          = 'kibana-3.1.2'
     # passwords setup

@@ -1,11 +1,11 @@
-# Install latest Docker on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
+# Install latest Docker on a CS1-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript docker
     version                 = _latest
     result_template         = docker_result_template
 
 globals
     docker_hostname         = 'docker'
-    docker_instance_type	= 'CS1-SSD'	# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    docker_instance_type    = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
     docker_image_type       = 'Ubuntu Server 14.04 LTS'
     docker_slice_user       = 'docker'
     # Password setup

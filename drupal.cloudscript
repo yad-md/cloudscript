@@ -1,11 +1,11 @@
-# Install Drupal 7.34 on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
+# Install Drupal 7.34 on a CS1-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript drupal_single_stack
     version              = '2014_12_24'
     result_template      = drupal_result_template  
 
 globals
     drupal_hostname      = 'drupal'
-    drupal_instance_type = 'CS1-SSD'	# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    drupal_instance_type = 'CS1-SSD'    # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
     drupal_image_type    = 'Ubuntu Server 14.04 LTS'
     drupal_version       = 'drupal-7.34'
     server_password      = lib::random_password()

@@ -6,11 +6,11 @@ cloudscript haproxy_multi_stack
 globals
     haproxy_hostname        = 'haproxy'
     haproxy_image_type      = 'Ubuntu Server 14.04 LTS'
-    haproxy_instance_type   = 'CS05-SSD'	# 0.5GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    haproxy_instance_type   = 'CS05-SSD'    # 0.5GB RAM, 1 vCore, 25GB SSD, 10Gbps
     apache_hostname_first   = 'apache1'
     apache_hostname_second  = 'apache2'
     apache_image_type       = 'Ubuntu Server 14.04 LTS'
-    apache_instance_type    = 'CS1-SSD'		# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    apache_instance_type    = 'CS1-SSD'     # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
     server_pass             = lib::random_password()
     console_pass            = lib::random_password()
     haproxy_slice_user      = 'haproxy'
@@ -54,8 +54,8 @@ task haproxy_server_setup
     # create apache bootstrap 
     # script and recipe
     #-------------------------
-    	
-	# place script data in cloudstorage
+        
+    # place script data in cloudstorage
     /storage/object apache_bootstrap_object => [haproxy_slice, haproxy_container] read_or_create
         container_name      = 'haproxy_container'
         file_name           = 'bootstrap_apache.sh'
@@ -68,7 +68,7 @@ task haproxy_server_setup
         script_type         = _SHELL
         encoding            = _STORAGE
     
-	# create the recipe and associate the script
+    # create the recipe and associate the script
     /orchestration/recipe apache_bootstrap_recipe read_or_create
         scripts             = [apache_bootstrap_script]
 
@@ -76,7 +76,7 @@ task haproxy_server_setup
     # create apache servers
     #-----------------------
 
-	/server/cloud apache1_server read_or_create
+    /server/cloud apache1_server read_or_create
         hostname            = '{{ apache_hostname_first }}'
         image               = '{{ apache_image_type }}'
         service_type        = '{{ apache_instance_type }}'

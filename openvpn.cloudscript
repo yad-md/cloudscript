@@ -3,7 +3,7 @@ cloudscript openvpn_multi_stack
     result_template     = openvpn_pair_result_tmpl
 
 globals
-    server_password	    = lib::random_password()
+    server_password     = lib::random_password()
     console_password    = lib::random_password()
     openvpn_slice_user  = 'openvpn'
 
@@ -95,22 +95,6 @@ task openvpn_server_client_setup
         keys            = [openvpn_server_pass_key, openvpn_server_console_key]
         recipes         = [openvpn_client_recipe]
 
-text_template openvpn_pair_result_tmpl
-
-Thank you for provisioning a openvpn server/client setup.
-
-You can login to the server server directly via SSH by connecting
-to root@{{ openvpn_server.ipaddress_public }} using the password:
-
-{{ openvpn_server_pass_key.password }}
-
-You can login to the openvpn client directly via SSH by connecting
-to root@{{ openvpn_client.ipaddress_public }} using the password:
-
-{{ openvpn_server_pass_key.password }}
-
-_eof
-
 text_template openvpn_server_script_tmpl
 #!/bin/bash
 
@@ -160,3 +144,18 @@ echo "Run '/usr/sbin/gadmin-openvpn-client' for GUI admin tool to configure and 
 
 _eof
 
+text_template openvpn_pair_result_tmpl
+
+Thank you for provisioning a openvpn server/client setup.
+
+You can login to the server server directly via SSH by connecting
+to root@{{ openvpn_server.ipaddress_public }} using the password:
+
+{{ openvpn_server_pass_key.password }}
+
+You can login to the openvpn client directly via SSH by connecting
+to root@{{ openvpn_client.ipaddress_public }} using the password:
+
+{{ openvpn_server_pass_key.password }}
+
+_eof

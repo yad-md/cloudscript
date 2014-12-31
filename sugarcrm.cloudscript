@@ -1,4 +1,4 @@
-# Install SugarCRM 6.5.20 on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
+# Install SugarCRM 6.5.20 on a CS1-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript sugarcrm
     version                 = _latest
     result_template         = sugarcrm_result_template

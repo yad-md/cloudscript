@@ -1,13 +1,13 @@
-# Install latest WordPress on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
+# Install latest WordPress on a CS1-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript wordpress_single_stack
     version                     = _latest  
     result_template             = wordpress_result_template
 
 globals
     wp_image_type               = 'Ubuntu Server 14.04 LTS'
-    wp_instance_type            = 'CS1-SSD'	# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    wp_instance_type            = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
     wp_hostname                 = 'wordpress'
-    server_password	        	= lib::random_password()
+    server_password             = lib::random_password()
     console_password            = lib::random_password()
     mysql_root_password         = lib::random_password()
     wordpress_admin_password    = lib::random_password()

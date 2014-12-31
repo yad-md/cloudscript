@@ -1,20 +1,20 @@
-# Install latest Docker and DockerUI on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
+# Install latest Docker and DockerUI on a CS1-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript docker
-    version					= _latest
-    result_template			= docker_result_template
+    version                 = _latest
+    result_template         = docker_result_template
 
 globals
-    docker_hostname			= 'docker'
-    docker_instance_type	= 'CS1-SSD'	# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
-    docker_image_type		= 'Ubuntu Server 14.04 LTS'
-    docker_slice_user		= 'docker'
+    docker_hostname         = 'docker'
+    docker_instance_type    = 'CS1-SSD'    # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    docker_image_type       = 'Ubuntu Server 14.04 LTS'
+    docker_slice_user       = 'docker'
     # passwords setup
-    server_password			= lib::random_password()
-    console_password		= lib::random_password()
-    webui_password			= lib::random_password()
+    server_password         = lib::random_password()
+    console_password        = lib::random_password()
+    webui_password          = lib::random_password()
 
 thread docker_setup
-    tasks					= [docker_serverui_setup]
+    tasks                   = [docker_serverui_setup]
 
 task docker_serverui_setup
 
@@ -24,8 +24,8 @@ task docker_serverui_setup
 
     # Create docker server root password key
     /key/password docker_serverui_password_key read_or_create
-        key_group			= _SERVER
-        password			= server_password
+        key_group           = _SERVER
+        password            = server_password
 
     # Create docker server console key
     /key/password docker_serverui_console_key read_or_create
@@ -143,19 +143,19 @@ upstream dockerui {
 }
 
 server {
-	listen 80 default_server;
-	listen [::]:80 default_server ipv6only=on;
-	listen 443 ssl;
-	ssl_certificate /etc/nginx/ssl/server.crt;
-	ssl_certificate_key /etc/nginx/ssl/server.key;
-	error_page 497 https://$host:9000$request_uri;	
-	server_name localhost;
+    listen 80 default_server;
+    listen [::]:80 default_server ipv6only=on;
+    listen 443 ssl;
+    ssl_certificate /etc/nginx/ssl/server.crt;
+    ssl_certificate_key /etc/nginx/ssl/server.key;
+    error_page 497 https://$host:9000$request_uri;    
+    server_name localhost;
 
-	location / {
-		proxy_pass http://dockerui;
-		auth_basic "Restricted";
-		auth_basic_user_file /app/.htpasswd;
-		proxy_http_version 1.1;
+    location / {
+        proxy_pass http://dockerui;
+        auth_basic "Restricted";
+        auth_basic_user_file /app/.htpasswd;
+        proxy_http_version 1.1;
         proxy_set_header Connection "";
 
         proxy_redirect     off;
@@ -163,7 +163,7 @@ server {
         proxy_set_header   X-Real-IP $remote_addr;
         proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Host $server_name;
-	}
+    }
 }
 
 EOF

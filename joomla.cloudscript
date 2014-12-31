@@ -6,7 +6,7 @@ cloudscript joomla_single_stack
 globals
     joomla_hostname         = 'joomla'
     joomla_image_type       = 'Ubuntu Server 14.04 LTS'
-    joomla_instance_type    = 'CS1-SSD'	# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    joomla_instance_type    = 'CS1-SSD'    # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
     mysql_root_password     = lib::random_password()
     joomla_admin_password   = lib::random_password()
     joomla_slice_user       = 'joomla'
