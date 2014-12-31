@@ -78,29 +78,6 @@ task config
         keys            = [drupal_server_key, drupal_console_key]
         recipes         = [drupal_install_recipe]
 
-text_template drupal_result_template
-
-Thank you for provisioning drupal server.
-
-You can now finish its configuration on the following page:
-
-http://{{ drupal_server.ipaddress_public }}/drupal
-
-Please use following credentials for database configuration:
-
-hostname: localhost
-username: {{ drupal_db_username }}
-password: {{ drupal_db_password }}
-database: {{ drupal_db_name }}
-
-You can also login to the server directly via SSH by connecting
-to root@{{ drupal_server.ipaddress_public }} using the password:
-
-{{ drupal_server_key.password }}
-
-_eof
-
-
 text_template install_drupal_sh
 #!/bin/bash
 #
@@ -211,5 +188,27 @@ chmod +X /etc/init.d/firewall
 update-rc.d firewall defaults &> /dev/null
 
 echo "OK: install drupal service"
+
+_eof
+
+text_template drupal_result_template
+
+Thank you for provisioning drupal server.
+
+You can now finish its configuration on the following page:
+
+http://{{ drupal_server.ipaddress_public }}/drupal
+
+Please use following credentials for database configuration:
+
+hostname: localhost
+username: {{ drupal_db_username }}
+password: {{ drupal_db_password }}
+database: {{ drupal_db_name }}
+
+You can also login to the server directly via SSH by connecting
+to root@{{ drupal_server.ipaddress_public }} using the password:
+
+{{ drupal_server_key.password }}
 
 _eof
