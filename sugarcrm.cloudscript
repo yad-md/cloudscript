@@ -1,19 +1,29 @@
+# Install SugarCRM 6.5.20 on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript sugarcrm
     version                 = _latest
     result_template         = sugarcrm_result_template
 
 globals
+    sugarcrm_hostname       = 'sugarcrm'
+    sugarcrm_instance_type  = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    sugarcrm_image_type     = 'Ubuntu Server 14.04 LTS'
+    sugarcrm_version        = 'SugarCE-6.5.20.zip'
     server_password         = lib::random_password()
     console_password        = lib::random_password()
     sugarcrm_db_password    = lib::random_password()
     sugarcrm_db_name        = 'sugarcrm'
     sugarcrm_db_username    = 'sugarcrm'
-
+    sugarcrm_slice_user     = 'sugarcrmsliceuser'
 
 thread core
     tasks                   = [install]
     
 task install
+
+    #-----------------------
+    # create wordpress keys
+    #-----------------------
+    
     /key/password sugarcrm_server_key read_or_create
         key_group           = _SERVER
         password            = server_password
@@ -21,13 +31,15 @@ task install
     /key/password sugarcrm_console_key read_or_create
         key_group           = _CONSOLE
         password            = console_password
-    #
-    # create sugarcrm storage slice, bootstrap script and recipe
-    #
+
+    #----------------------------
+    # create sugarcrm bootstrap 
+    # script and recipe
+    #----------------------------
     
     # storage slice key
     /key/token sugarcrm_slice_key read_or_create
-        username            = 'sugarcrmsliceuser'
+        username            = sugarcrm_slice_user
 
     # slice
     /storage/slice sugarcrm_slice read_or_create
@@ -54,36 +66,16 @@ task install
     /orchestration/recipe install_sugarcrm_recipe read_or_create
         scripts             = [install_sugarcrm_script]
 
-    # sugarcrm node
+    #------------------------
+    # create sugarcrm server
+    #------------------------
+    
     /server/cloud sugarcrm_server read_or_create
-        hostname            = 'sugarcrm'
-        image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type        = 'CS05'
+        hostname            = '{{ sugarcrm_hostname }}'
+        image               = '{{ sugarcrm_image_type }}'
+        service_type        = '{{ sugarcrm_instance_type }}'
         keys                = [sugarcrm_server_key, sugarcrm_console_key]
         recipes             = [install_sugarcrm_recipe]
-
-text_template sugarcrm_result_template
-
-Thank you for provisioning a SugarCRM service.
-
-You can now finish its configuration on the following page:
-
-http://{{ sugarcrm_server.ipaddress_public }}/sugarcrm/install.php
-
-Please use following credentials for database configuration:
-
-hostname: localhost
-username: {{ sugarcrm_db_username }}
-password: {{ sugarcrm_db_password }}
-database: {{ sugarcrm_db_name }}
-
-
-You can also login to the server directly via SSH by connecting
-to root@{{ sugarcrm_server.ipaddress_public }} using the password:
-
-{{ sugarcrm_server_key.password }}
-
-_eof
 
 text_template install_sugarcrm_sh
 #!/bin/bash
@@ -143,7 +135,9 @@ sed 's/^upload_max_filesize.*/upload_max_filesize = 10M/g' -i /etc/php5/apache2/
 a2enmod php5 > /dev/null
 
 # download sugarcrm source
-cd /var/www && wget -O sugarce.zip "http://sourceforge.net/projects/sugarcrm/files/1%20-%20SugarCRM%206.5.X/SugarCommunityEdition-6.5.X/SugarCE-6.5.11.zip/download" > /dev/null 2>&1
+cd /var/www/html/
+wget -O sugarce.zip "http://sourceforge.net/projects/sugarcrm/files/1%20-%20SugarCRM%206.5.X/SugarCommunityEdition-6.5.X/{{ sugarcrm_version }}/download" > /dev/null 2>&1
+
 [ $? -eq 0 ] && echo "OK: download sugarcrm source" || {
     echo "ERROR: download sugarcrm source"
     exit 1
@@ -155,13 +149,13 @@ unzip sugarce.zip > /dev/null
     exit 1
 }
 # move sugarcrm files
-cd /var/www/ && mv ./Sugar* ./sugarcrm
+mv ./Sugar* ./sugarcrm
 [ $? -eq 0 ] && echo "OK: move sugarcrm files" || {
     echo "ERROR: move sugarcrm files"
     exit 1
 }
 # set ownership & permissions
-chown -R www-data:www-data /var/www/sugarcrm
+chown -R www-data:www-data /var/www/html/sugarcrm
 [ $? -eq 0 ] && echo "OK: set required permissions" || {
     echo "ERROR: set required permissions"
     exit 1
@@ -181,10 +175,30 @@ EOF
 a2enmod rewrite > /dev/null 2>&1
 
 # restart web server
-/etc/init.d/apache2 stop  > /dev/null 2>&1
-/etc/init.d/apache2 start > /dev/null 2>&1
+service apache2 restart  > /dev/null 2>&1
 
 echo "OK: install sugarcrm service"
 
 _eof
 
+text_template sugarcrm_result_template
+
+Thank you for provisioning a SugarCRM service.
+
+You can now finish its configuration on the following page:
+
+http://{{ sugarcrm_server.ipaddress_public }}/sugarcrm/install.php
+
+Please use following credentials for database configuration:
+
+hostname: localhost
+username: {{ sugarcrm_db_username }}
+password: {{ sugarcrm_db_password }}
+database: {{ sugarcrm_db_name }}
+
+You can also login to the server directly via SSH by connecting to:
+
+root@{{ sugarcrm_server.ipaddress_public }}
+using the password: {{ sugarcrm_server_key.password }}
+
+_eof
