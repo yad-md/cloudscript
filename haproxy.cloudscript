@@ -1,11 +1,19 @@
+# Install latest HAProxy on CS05-SSD (1 x $.008/hr) and latest Apache on CS1-SSD (2x $.015/hr) all running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript haproxy_multi_stack
     version                 = _LATEST
     result_template         = haproxy_result_template
  
 globals
+    haproxy_hostname        = 'haproxy'
+    haproxy_image_type      = 'Ubuntu Server 14.04 LTS'
+    haproxy_instance_type   = 'CS05-SSD'	# 0.5GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    apache_hostname_first   = 'apache1'
+    apache_hostname_second  = 'apache2'
+    apache_image_type       = 'Ubuntu Server 14.04 LTS'
+    apache_instance_type    = 'CS1-SSD'		# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
     server_pass             = lib::random_password()
     console_pass            = lib::random_password()
-    haproxy_slice_user      = 'haproxysliceuser'
+    haproxy_slice_user      = 'haproxy'
     
 thread haproxy_setup
     tasks                   = [haproxy_server_setup]
@@ -19,12 +27,12 @@ task haproxy_server_setup
     # create haproxy server root password key
     /key/password haproxy_server_password_key read_or_create
         key_group           = _SERVER
-        password			= server_pass
-		
+        password            = server_pass
+
     # create haproxy server console key
     /key/password haproxy_server_console_key read_or_create
         key_group           = _CONSOLE
-		password			= console_pass
+        password            = console_pass
         
     # create storage slice keys
     /key/token haproxy_slice_key read_or_create
@@ -42,10 +50,10 @@ task haproxy_server_setup
     /storage/container haproxy_container => [haproxy_slice] read_or_create
         slice               = haproxy_slice
 
-    #-------------------------------
+    #-------------------------
     # create apache bootstrap 
     # script and recipe
-    #-------------------------------
+    #-------------------------
     	
 	# place script data in cloudstorage
     /storage/object apache_bootstrap_object => [haproxy_slice, haproxy_container] read_or_create
@@ -64,28 +72,28 @@ task haproxy_server_setup
     /orchestration/recipe apache_bootstrap_recipe read_or_create
         scripts             = [apache_bootstrap_script]
 
-    #-------------------------------
-    # create the apache servers
-    #-------------------------------
+    #-----------------------
+    # create apache servers
+    #-----------------------
 
 	/server/cloud apache1_server read_or_create
-        hostname            = 'apache1'
-        image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type        = 'CS05'
-        keys                = [haproxy_server_password_key, haproxy_server_console_key]
-        recipes             = [apache_bootstrap_recipe]
-		
-	/server/cloud apache2_server read_or_create
-        hostname            = 'apache2'
-        image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type        = 'CS05'
+        hostname            = '{{ apache_hostname_first }}'
+        image               = '{{ apache_image_type }}'
+        service_type        = '{{ apache_instance_type }}'
         keys                = [haproxy_server_password_key, haproxy_server_console_key]
         recipes             = [apache_bootstrap_recipe]
 
-    #-------------------------------
+    /server/cloud apache2_server read_or_create
+        hostname            = '{{ apache_hostname_second }}'
+        image               = '{{ apache_image_type }}'
+        service_type        = '{{ apache_instance_type }}'
+        keys                = [haproxy_server_password_key, haproxy_server_console_key]
+        recipes             = [apache_bootstrap_recipe]
+
+    #--------------------------
     # create haproxy bootstrap 
     # script and recipe
-    #-------------------------------
+    #--------------------------
 
     # place script data in cloudstorage
     /storage/object haproxy_bootstrap_object => [haproxy_slice, haproxy_container, apache1_server, apache2_server] read_or_create
@@ -104,17 +112,17 @@ task haproxy_server_setup
     /orchestration/recipe haproxy_bootstrap_recipe read_or_create
         scripts             = [haproxy_bootstrap_script]
 
-    #-------------------------------
-    # create the haproxy server
-    #-------------------------------
+    #-----------------------
+    # create haproxy server
+    #-----------------------
     
     /server/cloud haproxy_server read_or_create
-        hostname            = 'haproxy1'
-        image               = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type        = 'CS1'
+        hostname            = '{{ haproxy_hostname }}'
+        image               = '{{ haproxy_image_type }}'
+        service_type        = '{{ haproxy_instance_type }}'
         keys                = [haproxy_server_password_key, haproxy_server_console_key]
         recipes             = [haproxy_bootstrap_recipe]
-		
+
 #-------------------------
 # Apache
 #-------------------------
@@ -128,7 +136,7 @@ apt-get update
 # install apache2
 apt-get install -y apache2
 
-echo "Server `hostname` is responding which was created at `date`" > /var/www/index.html
+echo "Server `hostname` is responding which was created at `date`" > /var/www/html/index.html
 
 _eof
 
@@ -158,7 +166,7 @@ global
 
 defaults
     log global
-	balance roundrobin
+    balance roundrobin
     mode http
     retries 3
     option redispatch
@@ -185,7 +193,7 @@ echo "    server server1 {{ apache1_server.ipaddress_private }}:80 check inter 2
 echo "    server server2 {{ apache2_server.ipaddress_private }}:80 check inter 2000 fall 3" >> /etc/haproxy/haproxy.cfg
 
 # start haproxy
-/etc/init.d/haproxy start
+service haproxy start
 
 _eof
 
@@ -199,15 +207,15 @@ You may SSH to your servers and login with the following credentials:
 
 haproxy: {{ haproxy_server.ipaddress_public }}
 username: root
-password: {{ server_pass }}
+password: {{ haproxy_server_password_key.password }}
 
 apache1: {{ apache1_server.ipaddress_public }}
 username: root
-password: {{ server_pass }}
+password: {{ haproxy_server_password_key.password }}
 
 apache2: {{ apache2_server.ipaddress_public }}
 username: root
-password: {{ server_pass }}
+password: {{ haproxy_server_password_key.password }}
 
 Your apache web servers are located at:
 
