@@ -1,57 +1,60 @@
-# Cloudscript for Docker latest version server
+# Install latest Docker and DockerUI on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript docker
-    version                     = '2014_12_11'
-    result_template             = docker_result_template
+    version					= _latest
+    result_template			= docker_result_template
 
 globals
-    docker_hostname                = 'docker'
-    docker_instance_type           = 'CS1' # 1Gb, 1 core, 25Gb, 1Gbps
-    docker_image_type              = 'Ubuntu Server 14.04 LTS'
-    docker_slice_user              = 'docker'
-    # Password setup
-    server_password             = lib::random_password()
-    console_password            = lib::random_password()
+    docker_hostname			= 'docker'
+    docker_instance_type	= 'CS1-SSD'	# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    docker_image_type		= 'Ubuntu Server 14.04 LTS'
+    docker_slice_user		= 'docker'
+    # passwords setup
+    server_password			= lib::random_password()
+    console_password		= lib::random_password()
+    webui_password			= lib::random_password()
 
-thread elk_setup
-    tasks                       = [docker_server_setup]
+thread docker_setup
+    tasks					= [docker_serverui_setup]
 
-task docker_server_setup
+task docker_serverui_setup
 
-    #
+    #---------------------
     # Create docker keys
-    #
+    #---------------------
 
     # Create docker server root password key
-    /key/password docker_server_password_key read_or_create
-        key_group               = _SERVER
-        password                = server_password
+    /key/password docker_serverui_password_key read_or_create
+        key_group			= _SERVER
+        password			= server_password
 
     # Create docker server console key
+    /key/password docker_serverui_console_key read_or_create
+        key_group           = _CONSOLE
+        password            = console_password
 
-    /key/password docker_server_console_key read_or_create
-        key_group               = _CONSOLE
-        password                = console_password
+   # Create docker server web GUI key
+    /key/password docker_serverui_webui_key read_or_create
+        key_group           = _SERVER
+        password            = webui_password
 
-    #
-    # Create docker storage slice, bootstrap script and recipe
-    #
+    #------------------------------
+    # Create docker storage slice, 
+    # bootstrap script and recipe
+    #------------------------------
 
     # Create storage slice keys
     /key/token docker_slice_key read_or_create
         username                = docker_slice_user
 
     # Create slice to store script in cloudstorage
-
     /storage/slice docker_slice read_or_create
         keys                    = [docker_slice_key]
 
     # Create slice container to store script in cloudstorage
-
     /storage/container docker_container => [docker_slice] read_or_create
         slice                   = docker_slice
 
     # Place script data in cloudstorage
-
     /storage/object docker_bootstrap_object => [docker_slice, docker_container] read_or_create
         container_name          = 'docker_container'
         file_name               = 'bootstrap_docker.sh'
@@ -59,26 +62,24 @@ task docker_server_setup
         content_data            = docker_bootstrap_data
 
     # Associate the cloudstorage object with the docker script
-
     /orchestration/script docker_bootstrap_script => [docker_slice, docker_container, docker_bootstrap_object] read_or_create
         data_uri                = 'cloudstorage://docker_slice/docker_container/bootstrap_docker.sh'
         script_type             = _SHELL
         encoding                = _STORAGE
 
     # Create the recipe and associate the script
-
     /orchestration/recipe docker_bootstrap_recipe read_or_create
         scripts                 = [docker_bootstrap_script]
 
-    #
+    #--------------------------
     # Create the docker server
-    #
+    #--------------------------
 
-    /server/cloud docker_server read_or_create
+    /server/cloud docker_serverui read_or_create
         hostname                = '{{ docker_hostname }}'
         image                   = '{{ docker_image_type }}'
         service_type            = '{{ docker_instance_type }}'
-        keys                    = [docker_server_password_key, docker_server_console_key]
+        keys                    = [docker_serverui_password_key, docker_serverui_console_key]
         recipes                 = [docker_bootstrap_recipe]
 
 text_template docker_bootstrap_data
@@ -90,30 +91,104 @@ text_template docker_bootstrap_data
     exit 1
 }
 
-#Do apt work with HTTPS?
+# confirm apt-get will work with HTTPS
 [ -e /usr/lib/apt/methods/https ] || {
     apt-get update
     apt-get install apt-transport-https -y
 }
 
-#Add key and docker repo
+# add key and docker repo
 apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 36A1D7869245C8950F966E92D8576A8BA88D21E9
 echo "deb https://get.docker.com/ubuntu docker main" > /etc/apt/sources.list.d/docker.list
 
-#check new repo and install docker
+# check new repo and install docker
 apt-get update
+apt-get install apache2-utils -y
 apt-get install lxc-docker -y
 apt-get install lxc -y
 
-#Prepare docker config
+# prepare docker config
 echo 'DOCKER_OPTS="--bip=172.17.42.1/26"' >> /etc/default/docker
 service docker stop
 ip link delete docker0
 service docker start
 
-#deploy DockerUI
+# deploy dockerui
+sleep 2s
 docker build -t crosbymichael/dockerui github.com/crosbymichael/dockerui
 docker run -d -p 9000:9000 -v /var/run/docker.sock:/docker.sock crosbymichael/dockerui -e /docker.sock
+
+# stop docker
+NUM=$(docker ps | grep crosbymichael | sed -r 's/ .*//g')
+docker stop $NUM
+
+# copy dockerui image to a local repo
+docker pull alexerm/dockerui-auth
+
+# save DockerUI as a tar
+docker save -o /tmp/auth.tar alexerm/dockerui-auth
+
+# change nginx config inside container 
+mkdir /tmp/auth
+tar -xf /tmp/auth.tar -C /tmp/auth/
+cd /tmp/auth/ab21879052e850b2f5f6244e4b94c5ae2064b0a95c936b7ca4fe4e9d2dfd4c5f
+mkdir tmp
+tar -xf layer.tar -C tmp/
+cd tmp/
+#sed -r 's/ssl on/#ssl on/g' etc/nginx/sites-available/default > etc/nginx/sites-available/default-new
+#mv etc/nginx/sites-available/default-new etc/nginx/sites-available/default
+cat <<\EOF>etc/nginx/sites-available/default
+upstream dockerui {
+    server 127.0.0.1:9000;
+}
+
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server ipv6only=on;
+	listen 443 ssl;
+	ssl_certificate /etc/nginx/ssl/server.crt;
+	ssl_certificate_key /etc/nginx/ssl/server.key;
+	error_page 497 https://$host:9000$request_uri;	
+	server_name localhost;
+
+	location / {
+		proxy_pass http://dockerui;
+		auth_basic "Restricted";
+		auth_basic_user_file /app/.htpasswd;
+		proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        proxy_redirect     off;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Host $server_name;
+	}
+}
+
+EOF
+
+# create new image
+tar -cf ../layer.tar .
+cd ..
+rm -rf tmp
+cd ..
+tar -cf ../auth-new.tar .
+cd ..
+
+# replace old image in local repo
+docker rmi alexerm/dockerui-auth
+docker load -i auth-new.tar
+
+# clean up
+rm -rf auth*
+
+# create user password and start container
+mkdir /root/dockerui
+echo "{{ docker_serverui_webui_key.password }}" | htpasswd -ci /root/dockerui/.htpasswd admin
+mkdir /root/dockerui/ssl
+openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 -subj "/C=US/ST=Unknown/L=Unknown/O=Dis/CN=localhost" -keyout /root/dockerui/ssl/server.key  -out /root/dockerui/ssl/server.crt
+docker run -d -p 9000:443 -v /var/run/docker.sock:/var/run/docker.sock -v /root/dockerui/.htpasswd:/app/.htpasswd -v /root/dockerui/ssl:/etc/nginx/ssl alexerm/dockerui-auth
 
 _eof
 
@@ -121,10 +196,14 @@ text_template docker_result_template
 
 Your Docker server is ready at the following IP address:
 
-{{ docker_server.ipaddress_public }}
-login:   root
-password: {{server_password }}
+{{ docker_serverui.ipaddress_public }}
+login:    root
+password: {{ docker_serverui_password_key.password }}
 
-or you can use web interface: {{ docker_server.ipaddress_public }}:9000
+or you can use web interface:
+
+https://{{ docker_serverui.ipaddress_public }}:9000
+login:    admin
+password: {{ docker_serverui_webui_key.password }}
 
 _eof
