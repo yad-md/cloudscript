@@ -1,33 +1,44 @@
+# Install latest OpenVBX on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript openvbx_single_stack
-    version              = _latest
-    result_template      = openvbx_result_template  
+    version                 = _latest 
+    result_template         = openvbx_result_template  
 
 globals
-    server_password	    = lib::random_password()
-    console_password    = lib::random_password()
-    openvbx_db_password = lib::random_password()
-    openvbx_db_name     = 'OpenVBX'
-    openvbx_db_username = 'openvbx'
+    openvbx_hostname        = 'openvbx'
+    openvbx_image_type      = 'Ubuntu Server 14.04 LTS'
+    openvbx_instance_type   = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    openvbx_slice_user      = 'openvbx'
+    server_password         = lib::random_password()
+    console_password        = lib::random_password()
+    openvbx_db_password     = lib::random_password()
+    openvbx_db_name         = 'OpenVBX'
+    openvbx_db_username     = 'openvbx'
 
 thread openvbx_install
-    tasks               = [config]
+    tasks                   = [config]
     
 task config
+
+    #-----------------------
+    # create openvbx keys
+    #-----------------------
+    
     /key/password openvbx_server_key read_or_create
-        key_group       = _SERVER
-        password        = server_password
+        key_group           = _SERVER
+        password            = server_password
     
     /key/password openvbx_console_key read_or_create
-        key_group       = _CONSOLE
-        password        = console_password
+        key_group           = _CONSOLE
+        password            = console_password
 
-    #
-    # create openvbx storage slice, bootstrap script and recipe
-    #
+    #-------------------------------
+    # create openvbx storage slice,
+    # bootstrap script and recipe
+    #-------------------------------
     
     # storage slice key
     /key/token openvbx_slice_key read_or_create
-        username        = 'openvbxsliceuser'
+        username        = openvbx_slice_user
 
     # slice
     /storage/slice openvbx_slice read_or_create
@@ -54,37 +65,16 @@ task config
     /orchestration/recipe openvbx_install_recipe read_or_create
         scripts         = [openvbx_install_script]
 
-    # openvbx node
+    #-----------------------
+    # create openvbx server
+    #-----------------------
+    
     /server/cloud openvbx_server read_or_create
-        hostname        = 'openvbx'
-        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type    = 'CS05'
+        hostname        = '{{ openvbx_hostname }}'
+        image           = '{{ openvbx_image_type }}'
+        service_type    = '{{ openvbx_instance_type }}'
         keys            = [openvbx_server_key, openvbx_console_key]
         recipes         = [openvbx_install_recipe]
-
-text_template openvbx_result_template
-
-Thank you for provisioning an OpenVBX service.
-
-You can now finish its configuration on the following page:
-
-http://{{ openvbx_server.ipaddress_public }}/openvbx
-
-Please use following credentials for Database Configuration:
-
-hostname: localhost
-username: {{ openvbx_db_username }}
-password: {{ openvbx_db_password }}
-database: {{ openvbx_db_name }}
-
-
-You can also login to the server directly via SSH by connecting
-to root@{{ openvbx_server.ipaddress_public }} using the password:
-
-{{ openvbx_server_key.password }}
-
-_eof
-
 
 text_template install_openvbx_sh
 #!/bin/bash
@@ -140,26 +130,26 @@ cd /usr/local/src && wget -O openvbx.tgz https://github.com/twilio/OpenVBX/tarba
     exit 1
 }
 # create OpenVBX target directory
-mkdir -p /var/www/openvbx > /dev/null
+mkdir -p /var/www/html/openvbx > /dev/null
 [ $? -eq 0 ] && echo "OK: create OpenVBX target directory" || {
     echo "ERROR: create target directory"
     exit 1
 }
 # extract OpenVBX files
-tar xzf /usr/local/src/openvbx.tgz -C /var/www/openvbx/ > /dev/null
+tar xzf /usr/local/src/openvbx.tgz -C /var/www/html/openvbx/ > /dev/null
 [ $? -eq 0 ] && echo "OK: extract OpenVBX files" || {
     echo "ERROR: extract OpenVBX files"
     exit 1
 }
 # move OpenVBX files
-cd /var/www/openvbx && mv ./* _ && mv ./_/* . && rm -rf _
+cd /var/www/html/openvbx && mv ./* _ && mv ./_/* . && rm -rf _
 [ $? -eq 0 ] && echo "OK: move OpenVBX files" || {
     echo "ERROR: move OpenVBX files"
     exit 1
 }
 # set ownership & permissions
-cd /var/www/openvbx && chmod 0775 ./audio-uploads && chown www-data:www-data ./audio-uploads
-cd /var/www/openvbx && chmod -R 0775 ./OpenVBX/config && chown -R www-data:www-data ./OpenVBX/config
+cd /var/www/html/openvbx && chmod 0775 ./audio-uploads && chown www-data:www-data ./audio-uploads
+chmod -R 0775 ./OpenVBX/config && chown -R www-data:www-data ./OpenVBX/config
 [ $? -eq 0 ] && echo "OK: set required permissions" || {
     echo "ERROR: set required permissions"
     exit 1
@@ -179,12 +169,33 @@ EOF
 a2enmod rewrite > /dev/null 2>&1
 
 # create & update .htaccess
-cd /var/www/openvbx && mv ./htaccess_dist ./.htaccess && sed 's@# RewriteBase /openvbx@RewriteBase /openvbx@g' -i ./.htaccess
+mv ./htaccess_dist ./.htaccess && sed 's@# RewriteBase /openvbx@RewriteBase /openvbx@g' -i ./.htaccess
 
 # restart web server
-/etc/init.d/apache2 stop  > /dev/null 2>&1
-/etc/init.d/apache2 start > /dev/null 2>&1
+service apache2 restart
 
 echo "OK: install OpenVBX service"
+
+_eof
+
+text_template openvbx_result_template
+
+Thank you for provisioning an OpenVBX service.
+
+You can now finish its configuration on the following page:
+
+http://{{ openvbx_server.ipaddress_public }}/openvbx
+
+Please use following credentials for Database Configuration:
+
+hostname: localhost
+username: {{ openvbx_db_username }}
+password: {{ openvbx_db_password }}
+database: {{ openvbx_db_name }}
+
+You can also login to the server directly via SSH by connecting
+to root@{{ openvbx_server.ipaddress_public }} using the password:
+
+{{ openvbx_server_key.password }}
 
 _eof
