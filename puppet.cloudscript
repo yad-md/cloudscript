@@ -1,8 +1,14 @@
+# Install latest Puppet Master and Agent on CS1-SSD (2x $.015/hr) all running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript puppet_multi_stack
     version             = _latest
     result_template     = puppet_pair_result_tmpl
 
 globals
+    puppet_hostname_master  = 'puppet-master'
+    puppet_hostname_agent   = 'puppet-agent'
+    puppet_instance_type    = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    puppet_image_type       = 'Ubuntu Server 14.04 LTS'
+  
     server_password     = lib::random_password()
     console_password    = lib::random_password()
     puppet_slice_user   = 'puppet'
@@ -13,7 +19,7 @@ thread puppet_setup
 task puppet_master_agent_setup
 
     #-----------------------
-    # Keys
+    # create puppet keys
     #-----------------------
 
     /key/password puppet_server_pass_key read_or_create
@@ -28,9 +34,10 @@ task puppet_master_agent_setup
     /key/token puppet_slice_key read_or_create
         username        = puppet_slice_user   
 
-    #-------------------------------
-    # create puppet bootstrap
-    #-------------------------------
+    #----------------------------------------
+    # create puppet master/agent bootstraps, 
+    # scripts and recipes
+    #----------------------------------------
     
     # create slice to store script in cloudstorage
     /storage/slice puppet_slice read_or_create
@@ -66,10 +73,6 @@ task puppet_master_agent_setup
         script_type     = _shell
         encoding        = _storage
     
-    #-------------------------------
-    # create puppet master recipe
-    #-------------------------------
-    
     /orchestration/recipe puppet_master_recipe read_or_create
         scripts         = [puppet_master_script]
 
@@ -77,20 +80,20 @@ task puppet_master_agent_setup
         scripts         = [puppet_agent_script]
 
     #-----------------------
-    # Cloud Servers
+    # create puppet servers
     #-----------------------
 
     /server/cloud puppet_master_server read_or_create
-        hostname        = 'puppet-master'
-        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type    = 'CS1'
+        hostname        = '{{ puppet_hostname_master }}'
+        image           = '{{ puppet_image_type }}'
+        service_type    = '{{ puppet_instance_type }}'
         keys            = [puppet_server_pass_key, puppet_server_console_key]
         recipes         = [puppet_master_recipe]
 
     /server/cloud puppet_agent_server read_or_create
-        hostname        = 'puppet-agent'
-        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type    = 'CS1'
+        hostname        = '{{ puppet_hostname_agent }}'
+        image           = '{{ puppet_image_type }}'
+        service_type    = '{{ puppet_instance_type }}'
         keys            = [puppet_server_pass_key, puppet_server_console_key]
         recipes         = [puppet_agent_recipe]
 
@@ -164,7 +167,7 @@ node puppet-agent {
     package { "apache2":  ensure => present, }
     service { "apache2":  ensure => running, require => Package["apache2"], }
 
-    file { "/var/www/index.html":
+    file { "/var/www/html/index.html":
       content => "This web server was provisioned by puppet.",
       require => Package["apache2"],
       owner => "www-data",
@@ -239,14 +242,14 @@ text_template puppet_pair_result_tmpl
 Thank you for provisioning a puppet master/agent setup.
 
 You can login to the master server directly via SSH by connecting
-to root@{{ puppet_master_server.ipaddress_public }} using the password:
+to:
 
-{{ puppet_server_pass_key.password }}
+root@{{ puppet_master_server.ipaddress_public }}
+using the password: {{ puppet_server_pass_key.password }}
 
-You can login to the agent client directly via SSH by connecting
-to root@{{ puppet_agent_server.ipaddress_public }} using the password:
+You can login to the agent client directly via SSH by connecting to:
 
-{{ puppet_server_pass_key.password }}
+root@{{ puppet_agent_server.ipaddress_public }}
+using the password: {{ puppet_server_pass_key.password }}
 
 _eof
-
