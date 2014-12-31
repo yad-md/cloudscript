@@ -1,93 +1,89 @@
+# Install phpBB 3.1.2 on a CS1-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript phpbb
-    version              = _latest
-    result_template      = phpbb_result_template
+    version             = _latest
+    result_template     = phpbb_result_template
 
 globals
-    server_password      = lib::random_password()
-    console_password     = lib::random_password()
-    phpbb_db_password    = lib::random_password()
-    phpbb_db_name        = 'phpbb'
-    phpbb_db_username    = 'phpbb'
+    phpbb_hostname      = 'phpbb'
+    phpbb_instance_type = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    phpbb_image_type    = 'Ubuntu Server 14.04 LTS'
+    # Check for new version here: https://www.phpbb.com/files/release/
+    phpbb_version       = 'phpBB-3.1.2'
+    # passwords setup
+    server_password     = lib::random_password()
+    console_password    = lib::random_password()
+    phpbb_db_password   = lib::random_password()
+    phpbb_db_name       = 'phpbb'
+    phpbb_db_username   = 'phpbb'
+    phpbb_slice_user    = 'phpbb'
 
+thread phpbb_setup
+    tasks               = [phpbb_server_setup]
 
-thread core
-    tasks                = [install]
-    
-task install
-    /key/password phpbb_server_key read_or_create
-        key_group        = _SERVER
-        password         = server_password
-    
-    /key/password phpbb_console_key read_or_create
-        key_group        = _CONSOLE
-        password         = console_password
-    #
-    # create phpbb storage slice, bootstrap script and recipe
-    #
-    
-    # storage slice key
+task phpbb_server_setup
+
+    #-------------------
+    # Create phpbb keys
+    #-------------------
+
+    # Create phpbb server root password key
+    /key/password phpbb_server_password_key read_or_create
+        key_group       = _SERVER
+        password        = server_password
+
+    # Create phpbb server console key
+
+    /key/password phpbb_server_console_key read_or_create
+        key_group       = _CONSOLE
+        password        = console_password
+
+    #-----------------------------
+    # Create phpbb storage slice,
+    # bootstrap script and recipe
+    #-----------------------------
+
+    # Create storage slice keys
     /key/token phpbb_slice_key read_or_create
-        username         = 'phpbbsliceuser'
+        username        = phpbb_slice_user
 
-    # slice
+    # Create slice to store script in cloudstorage
     /storage/slice phpbb_slice read_or_create
-        keys             = [phpbb_slice_key]
+        keys            = [phpbb_slice_key]
 
-    # slice container
+    # Create slice container to store script in cloudstorage
     /storage/container phpbb_container => [phpbb_slice] read_or_create
-        slice            = phpbb_slice
+        slice           = phpbb_slice
 
-    # store script as object in cloudstorage
-    /storage/object install_phpbb_script_object => [phpbb_slice, phpbb_container] read_or_create
-        container_name   = 'phpbb_container'
-        file_name        = 'install_phpbb.sh'
-        slice            =  phpbb_slice
-        content_data     =  install_phpbb_sh
+    # Place script data in cloudstorage
+    /storage/object phpbb_bootstrap_object => [phpbb_slice, phpbb_container] read_or_create
+        container_name  = 'phpbb_container'
+        file_name       = 'bootstrap_phpbb.sh'
+        slice           = phpbb_slice
+        content_data    = phpbb_bootstrap_data
 
-    # associate the cloudstorage object with the phpbb script
-    /orchestration/script install_phpbb_script => [phpbb_slice, phpbb_container, install_phpbb_script_object] read_or_create
-        data_uri         = 'cloudstorage://phpbb_slice/phpbb_container/install_phpbb.sh'
-        script_type      = _SHELL
-        encoding         = _STORAGE
+    # Associate the cloudstorage object with the phpbb script
+    /orchestration/script phpbb_bootstrap_script => [phpbb_slice, phpbb_container, phpbb_bootstrap_object] read_or_create
+        data_uri        = 'cloudstorage://phpbb_slice/phpbb_container/bootstrap_phpbb.sh'
+        script_type     = _SHELL
+        encoding        = _STORAGE
 
-    # create the recipe and associate the script
-    /orchestration/recipe install_phpbb_recipe read_or_create
-        scripts          = [install_phpbb_script]
+    # Create the recipe and associate the script
+    /orchestration/recipe phpbb_bootstrap_recipe read_or_create
+        scripts         = [phpbb_bootstrap_script]
 
-    # phpbb node
+    #---------------------
+    # Create phpbb server
+    #---------------------
+
     /server/cloud phpbb_server read_or_create
-        hostname         = 'phpbb'
-        image            = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type     = 'CS05'
-        keys             = [phpbb_server_key, phpbb_console_key]
-        recipes          = [install_phpbb_recipe]
+        hostname        = '{{ phpbb_hostname }}'
+        image           = '{{ phpbb_image_type }}'
+        service_type    = '{{ phpbb_instance_type }}'
+        keys            = [phpbb_server_password_key, phpbb_server_console_key]
+        recipes         = [phpbb_bootstrap_recipe]
 
-
-text_template phpbb_result_template
-
-Thank you for provisioning a phpbb service.
-
-You can now finish its configuration on the following page:
-
-http://{{ phpbb_server.ipaddress_public }}/phpbb/
-
-Please use following credentials for database configuration:
-
-hostname: localhost
-username: {{ phpbb_db_username }}
-password: {{ phpbb_db_password }}
-database: {{ phpbb_db_name }}
-
-
-You can also login to the server directly via SSH by connecting
-to root@{{ phpbb_server.ipaddress_public }} using the password:
-
-{{ phpbb_server_key.password }}
-
-_eof
-
-text_template install_phpbb_sh
-#!/bin/bash
+text_template phpbb_bootstrap_data
+#!/bin/sh
 #
 # install phpbb service
 #
@@ -119,7 +115,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-server mysql-client > /d
 }
 
 # install Apache2
-DEBIAN_FRONTEND=noninteractive apt-get install -y apache2 > /dev/null
+DEBIAN_FRONTEND=noninteractive apt-get install apache2 -y > /dev/null
 [ $? -eq 0 ] && echo "OK: install Apache2" || {
     echo "ERROR: install Apache2"
     exit 1
@@ -141,7 +137,8 @@ apt-get install -y php5-mysql php5-memcache php5-curl php5-gd php5-imap > /dev/n
 a2enmod php5 > /dev/null
 
 # download phpbb source
-cd /var/www && wget -O phpbb.zip "https://www.phpbb.com/files/release/phpBB-3.0.11.zip" > /dev/null 2>&1
+cd /var/www/html/
+wget -O phpbb.zip "https://www.phpbb.com/files/release/{{ phpbb_version }}.zip" > /dev/null 2>&1
 [ $? -eq 0 ] && echo "OK: download phpbb source" || {
     echo "ERROR: download phpbb source"
     exit 1
@@ -153,13 +150,13 @@ unzip phpbb.zip > /dev/null
     exit 1
 }
 # move phpbb files
-cd /var/www/ && mv ./phpBB3 ./phpbb
+mv ./phpBB3 ./phpbb
 [ $? -eq 0 ] && echo "OK: move phpbb files" || {
     echo "ERROR: move phpbb files"
     exit 1
 }
 # set ownership & permissions
-chown -R www-data:www-data /var/www/phpbb
+chown -R www-data:www-data /var/www/html/phpbb
 [ $? -eq 0 ] && echo "OK: set required permissions" || {
     echo "ERROR: set required permissions"
     exit 1
@@ -170,6 +167,7 @@ mysql <<EOF
 create database {{ phpbb_db_name }};
 grant all on {{ phpbb_db_name }}.* to {{ phpbb_db_username }}@localhost identified by '{{ phpbb_db_password }}';
 EOF
+
 [ $? -eq 0 ] && echo "OK: create phpbb database and user" || {
     echo "ERROR: create phpbb database and user"
     exit 1
@@ -179,10 +177,29 @@ EOF
 a2enmod rewrite > /dev/null 2>&1
 
 # restart web server
-/etc/init.d/apache2 stop  > /dev/null 2>&1
-/etc/init.d/apache2 start > /dev/null 2>&1
+service apache2 restart > /dev/null 2>&1
 
 echo "OK: install phpbb service"
 
 _eof
 
+text_template phpbb_result_template
+Thank you for provisioning a phpbb service.
+
+You can now finish its configuration on the following page:
+
+http://{{ phpbb_server.ipaddress_public }}/phpbb/
+
+Please use following credentials for database configuration:
+
+hostname: localhost
+username: {{ phpbb_db_username }}
+password: {{ phpbb_db_password }}
+database: {{ phpbb_db_name }}
+
+You can also login to the server directly via SSH by connecting to:
+
+root@{{ phpbb_server.ipaddress_public }}
+using the password: {{ phpbb_server_password_key.password }}
+
+_eof
