@@ -1,20 +1,24 @@
+# Install latest Cloudera Hadoop distribution on a CS2.1-SSD Cloudlet ($.022/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript hadoop_single_node
-    version             = _latest  
-    result_template     = hadoop_result_template
+    version             	= _latest  
+    result_template     	= hadoop_result_template
 
 globals
-    server_password	    = lib::random_password()
-    console_password    = lib::random_password()
-    hadoop_slice_user   = 'hadoop'
+	hadoop_hostname			= 'hadoop'
+    hadoop_instance_type	= 'CS2.1-SSD'	# 2GB RAM, 1 vCore(s), 37GB SSD, 10Gbps
+    hadoop_image_type    	= 'Ubuntu Server 14.04 LTS'
+    server_password	    	= lib::random_password()
+    console_password    	= lib::random_password()
+    hadoop_slice_user   	= 'hadoop'
     
 thread hadoop_setup
-    tasks               = [hadoop_node_setup]
+    tasks               	= [hadoop_node_setup]
 
 task hadoop_node_setup
 
-    #-------------------------------
+    #--------------------
     # create hadoop keys
-    #-------------------------------
+    #--------------------
     
     # create hadoop server root password key
     /key/password hadoop_server_password_key read_or_create
@@ -30,10 +34,10 @@ task hadoop_node_setup
     /key/token hadoop_slice_key read_or_create
         username        = hadoop_slice_user  
         
-    #-------------------------------
+    #-------------------------
     # create hadoop bootstrap 
     # script and recipe
-    #-------------------------------
+    #-------------------------
     
     # create slice to store script in cloudstorage
     /storage/slice hadoop_slice read_or_create
@@ -60,14 +64,14 @@ task hadoop_node_setup
     /orchestration/recipe hadoop_bootstrap_recipe read_or_create
         scripts         = [hadoop_bootstrap_script]
 
-    #-------------------------------
-    # create the hadoop node
-    #-------------------------------
+    #--------------------
+    # create hadoop node
+    #--------------------
     
     /server/cloud hadoop_server read_or_create
-        hostname        = 'hadoop'
-        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type    = 'CS2.1'
+        hostname        = '{{ hadoop_hostname }}'
+        image           = '{{ hadoop_image_type }}'
+        service_type    = '{{ hadoop_instance_type }}'
         keys            = [hadoop_server_password_key, hadoop_server_console_key]
         recipes         = [hadoop_bootstrap_recipe]
 
