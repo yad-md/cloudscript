@@ -1,8 +1,13 @@
+# Install Drupal 7.34 on a CS01-SSD Cloudlet ($.015/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript drupal_single_stack
-    version              = _latest
+    version              = '2014_12_24'
     result_template      = drupal_result_template  
 
 globals
+    drupal_hostname      = 'drupal'
+    drupal_instance_type = 'CS1-SSD'	# 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    drupal_image_type    = 'Ubuntu Server 14.04 LTS'
+    drupal_version       = 'drupal-7.34'
     server_password      = lib::random_password()
     console_password     = lib::random_password()
     drupal_db_password   = lib::random_password()
@@ -14,6 +19,11 @@ thread drupal_install
     tasks                = [config]
     
 task config
+
+    #--------------------
+    # create drupal keys
+    #--------------------
+    
     /key/password drupal_server_key read_or_create
         key_group        = _SERVER
         password         = server_password
@@ -22,9 +32,10 @@ task config
         key_group        = _CONSOLE
         password         = console_password
 
-    #
-    # create drupal storage slice, bootstrap script and recipe
-    #
+    #------------------------------
+    # create drupal storage slice, 
+    # bootstrap script and recipe
+    #------------------------------
     
     # storage slice key
     /key/token drupal_slice_key read_or_create
@@ -55,11 +66,15 @@ task config
     /orchestration/recipe drupal_install_recipe read_or_create
         scripts         = [drupal_install_script]
 
-    # drupal node
-    /server/cloud drupal_server read_or_create
-        hostname        = 'drupal'
-        image           = 'Linux Ubuntu Server 10.04 LTS 64-bit'
-        service_type    = 'CS05'
+    #--------------------
+    # create drupal node
+    #--------------------
+    
+    # create a new instance of drupal every time the cloudscript is run
+    /server/cloud drupal_server create_enumerate
+        hostname        = '{{ drupal_hostname }}'
+        image           = '{{ drupal_image_type }}'
+        service_type    = '{{ drupal_instance_type }}'
         keys            = [drupal_server_key, drupal_console_key]
         recipes         = [drupal_install_recipe]
 
@@ -134,26 +149,26 @@ apt-get install -y php5-mysql php5-gd php5-curl > /dev/null
 a2enmod php5 > /dev/null
 
 # download drupal source
-cd /usr/local/src && wget -O drupal.tar.gz http://ftp.drupal.org/files/projects/drupal-7.15.tar.gz > /dev/null 2>&1
+cd /usr/local/src && wget -O drupal.tar.gz http://ftp.drupal.org/files/projects/{{ drupal_version }}.tar.gz > /dev/null 2>&1
 [ $? -eq 0 ] && echo "OK: download drupal source" || {
     echo "ERROR: download drupal source"
     exit 1
 }
 # extract drupal files
-tar xzf /usr/local/src/drupal.tar.gz -C /var/www > /dev/null
+tar xzf /usr/local/src/drupal.tar.gz -C /var/www/html > /dev/null
 [ $? -eq 0 ] && echo "OK: extract drupal files" || {
     echo "ERROR: extract drupal files"
     exit 1
 }
 # move drupal files
-cd /var/www && mv ./drupal* ./drupal > /dev/null
+cd /var/www/html && mv ./drupal* ./drupal > /dev/null
 [ $? -eq 0 ] && echo "OK: move drupal files" || {
     echo "ERROR: move drupal files"
     exit 1
 }
 
 # set ownership & permissions
-cd /var/www/drupal &&
+cd /var/www/html/drupal &&
 cp sites/default/default.settings.php sites/default/settings.php &&
 chmod 666 sites/default/settings.php &&
 chmod a+w sites/default
@@ -176,8 +191,7 @@ EOF
 a2enmod rewrite > /dev/null 2>&1
 
 # restart web server
-/etc/init.d/apache2 stop  > /dev/null 2>&1
-/etc/init.d/apache2 start > /dev/null 2>&1
+service apache2 restart
 
 #
 # firewall setup
