@@ -1,0 +1,185 @@
+# Cloudscript for devstack latest version server
+# Install latest OpenStack DevStack on a CS4.4-SSD Cloudlet ($.06/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
+ccloudscript devstack
+    version                 = _latest
+    result_template         = devstack_result_template
+
+globals
+    devstack_hostname       = 'devstack'
+    devstack_instance_type  = 'CS4.4-SSD'   # 4GB RAM, 4 vCore, 100GB SSD, 10Gbps
+    devstack_image_type     = 'Ubuntu Server 14.04 LTS'
+    devstack_slice_user     = 'devstack'
+    devstack_branch         = 'stable/icehouse'
+    oneforall_password      = lib::random_password()
+    server_password         = lib::random_password()
+    console_password        = lib::random_password()
+
+thread devstack_setup
+    tasks                   = [devstack_server_setup]
+
+task devstack_server_setup
+
+    #----------------------
+    # Create devstack keys
+    #----------------------
+
+    # Create devstack all-for-one password key
+    /key/password devstack_oneforall_password_key read_or_create
+        key_group           = _SERVER
+        password            = oneforall_password
+
+    # Create devstack server root password key
+    /key/password devstack_server_password_key read_or_create
+        key_group           = _SERVER
+        password            = server_password
+
+    # Create devstack server console key
+    /key/password devstack_server_console_key read_or_create
+        key_group           = _CONSOLE
+        password            = console_password
+
+    #--------------------------------
+    # Create devstack storage slice,
+    # bootstrap script and recipe
+    #--------------------------------
+
+    # Create storage slice keys
+    /key/token devstack_slice_key read_or_create
+        username            = devstack_slice_user
+
+    # Create slice to store script in cloudstorage
+
+    /storage/slice devstack_slice read_or_create
+        keys                = [devstack_slice_key]
+
+    # Create slice container to store script in cloudstorage
+    /storage/container devstack_container => [devstack_slice] read_or_create
+        slice               = devstack_slice
+
+    # Place script data in cloudstorage
+
+    /storage/object devstack_bootstrap_object => [devstack_slice, devstack_container] read_or_create
+        container_name      = 'devstack_container'
+        file_name           = 'bootstrap_devstack.sh'
+        slice               = devstack_slice
+        content_data        = devstack_bootstrap_data
+
+    # Associate the cloudstorage object with the devstack script
+    /orchestration/script devstack_bootstrap_script => [devstack_slice, devstack_container, devstack_bootstrap_object] read_or_create
+        data_uri            = 'cloudstorage://devstack_slice/devstack_container/bootstrap_devstack.sh'
+        script_type         = _SHELL
+        encoding            = _STORAGE
+
+    # Create the recipe and associate the script
+    /orchestration/recipe devstack_bootstrap_recipe read_or_create
+        scripts             = [devstack_bootstrap_script]
+
+    #
+    # Create the devstack server
+    #
+
+    /server/cloud devstack_server read_or_create
+        hostname            = '{{ devstack_hostname }}'
+        image               = '{{ devstack_image_type }}'
+        service_type        = '{{ devstack_instance_type }}'
+        keys                = [devstack_server_password_key, devstack_server_console_key]
+        recipes             = [devstack_bootstrap_recipe]
+        recipe_timeout      = 660
+
+text_template devstack_bootstrap_data
+#!/bin/sh
+
+# check if running as root
+[ `whoami` = 'root' ] || {
+    echo "ERROR: must have root permissions to execute the commands"
+    exit 1
+}
+
+# Update packages
+apt-get update
+#apt-get upgrade -y
+
+# Install git
+apt-get install git -y
+
+# Clone devstack repo from stable branch
+cd /opt
+git clone -b {{ devstack_branch }} https://github.com/openstack-dev/devstack.git
+
+# Create local.conf with necessary config options
+cat <<\EOF>/opt/devstack/local.conf
+[[local|localrc]]
+#Network 
+#HOST_IP=
+HOST_IP_IFACE=eth0
+
+# Database user
+DATABASE_USER=root
+
+# Passwords
+DATABASE_PASSWORD={{ devstack_oneforall_password_key.password }}
+ADMIN_PASSWORD={{ devstack_oneforall_password_key.password }}
+SERVICE_PASSWORD={{ devstack_oneforall_password_key.password }}
+SERVICE_TOKEN={{ devstack_oneforall_password_key.password }}
+RABBIT_PASSWORD={{ devstack_oneforall_password_key.password }}
+SWIFT_HASH={{ devstack_oneforall_password_key.password }}
+
+# Branches
+KEYSTONE_BRANCH=stable/icehouse
+NOVA_BRANCH=stable/icehouse
+NEUTRON_BRANCH=stable/icehouse
+SWIFT_BRANCH=stable/icehouse
+GLANCE_BRANCH=stable/icehouse
+CINDER_BRANCH=stable/icehouse
+HEAT_BRANCH=stable/icehouse
+TROVE_BRANCH=stable/icehouse
+HORIZON_BRANCH=stable/icehouse
+
+# Services
+ENABLED_SERVICES=rabbit,mysql,key
+ENABLED_SERVICES+=,n-api,n-crt,n-obj,n-cpu,n-cond,n-sch,n-novnc,n-cauth
+ENABLED_SERVICES+=,neutron,q-svc,q-agt,q-dhcp,q-l3,q-meta,q-lbaas
+#ENABLED_SERVICES+=,s-proxy,s-object,s-container,s-account
+ENABLED_SERVICES+=,g-api,g-reg
+ENABLED_SERVICES+=,cinder,c-api,c-vol,c-sch,c-bak
+ENABLED_SERVICES+=,heat,h-api,h-api-cfn,h-api-cw,h-eng
+ENABLED_SERVICES+=,trove,tr-api,tr-tmgr,tr-cond
+ENABLED_SERVICES+=,horizon
+
+# Enable Logging
+LOGFILE=/opt/stack/logs/stack.sh.log
+
+EOF
+
+# Add public IP to configuration
+IP=`ifconfig eth0 | grep "inet addr" | head -n 1 | cut -d : -f 2 | cut -d " " -f 1`
+sed -r "s/#HOST_IP=/HOST_IP=$IP/g" /opt/devstack/local.conf > /opt/devstack/local.conf.tmp
+mv /opt/devstack/local.conf.tmp /opt/devstack/local.conf
+
+# Replace passwords with hash
+HASH=`echo "{{ devstack_oneforall_password_key.password }}" | sha256sum |awk '{print $1}'`
+sed -r "s/SWIFT_HASH=.*/SWIFT_HASH=$HASH/g" /opt/devstack/local.conf > /opt/devstack/local.conf.tmp
+mv /opt/devstack/local.conf.tmp /opt/devstack/local.conf
+
+# Create user
+/opt/devstack/tools/create-stack-user.sh
+
+# Change privileges
+chown -R stack:stack /opt/devstack
+
+# Create stack
+su stack -c /opt/devstack/stack.sh
+
+_eof
+
+text_template devstack_result_template
+
+Horizon will be ready in few minutes at http://{{ devstack_server.ipaddress_public }}/
+Login: admin
+Password: {{ devstack_oneforall_password_key.password }}
+
+You can login via ssh to: {{ devstack_server.ipaddress_public }}
+Login: root
+Password: {{ devstack_server_password_key.password }}
+
+_eof
