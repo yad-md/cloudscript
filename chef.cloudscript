@@ -1,4 +1,4 @@
-# Install latest Puppet Master and Agent on CS1-SSD (2x $.015/hr) all running Linux Ubuntu Server 14.04 LTS 64-bit
+# Install latest Chef Master and Agent on CS1-SSD (2x $.015/hr) all running Linux Ubuntu Server 14.04 LTS 64-bit
 cloudscript chef_multi_stack
     version                 = _LATEST
     result_template         = chef_result_template
