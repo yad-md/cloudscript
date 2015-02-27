@@ -1,5 +1,5 @@
 # Install latest OpenStack DevStack on a CS4.4-SSD Cloudlet ($.06/hr) running Linux Ubuntu Server 14.04 LTS 64-bit
-ccloudscript devstack
+cloudscript devstack
     version                 = _latest
     result_template         = devstack_result_template
 
