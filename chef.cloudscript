@@ -1,0 +1,272 @@
+# Install latest Puppet Master and Agent on CS1-SSD (2x $.015/hr) all running Linux Ubuntu Server 14.04 LTS 64-bit
+cloudscript chef_multi_stack
+    version                 = _LATEST
+    result_template         = chef_result_template
+ 
+globals
+    server_hostname         = 'chef-server'
+    server_image_type       = 'Ubuntu Server 14.04 LTS'
+    server_instance_type    = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps 
+    client_hostname         = 'chef-client'
+    client_image_type       = 'Ubuntu Server 14.04 LTS'
+    client_instance_type    = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps 
+    system                  = 'ubuntu'
+    sys_server_version      = 'trusty'
+    sys_client_version      = '13.04'
+    chef_version            = '12.0.3-1_amd64'
+    server_pass             = lib::random_password()
+    console_pass            = lib::random_password()
+    chef_slice_user         = 'chef'
+    organization_short      = 'companyname'
+    organization_full       = 'Company Name'
+    admin_user              = 'admin'
+    admin_user_full         = 'Administrator'
+    admin_mail              = 'admin@companyname.com'
+    admin_password          = lib::random_password()
+    
+thread haproxy_setup
+    tasks                   = [chef_client_server_setup]
+
+task chef_client_server_setup
+
+    #-------------------------------
+    # create chef keys
+    #-------------------------------
+    
+    # create chef server root password key
+    /key/password chef_server_password_key read_or_create
+        key_group           = _SERVER
+        password    		= server_pass
+		
+    # create chef server console key
+    /key/password chef_server_console_key read_or_create
+        key_group           = _CONSOLE
+		password			= console_pass
+        
+    # create admin password key
+    /key/password admin_password_key read_or_create
+        key_group           = _SERVER
+        password            = server_pass
+
+    # create storage slice keys
+    /key/token chef_slice_key read_or_create
+        username            = chef_slice_user
+        
+    #-------------------------------
+    # create slice and container
+    #-------------------------------
+    
+    # create slice to store script in cloudstorage
+    /storage/slice chef_slice read_or_create
+        keys                = [chef_slice_key]
+    
+    # create slice container to store script in cloudstorage
+    /storage/container chef_container => [chef_slice] read_or_create
+        slice               = chef_slice
+
+    #-------------------------------
+    # create chef-server bootstrap 
+    # script and recipe
+    #-------------------------------
+
+    # place script data in cloudstorage
+    /storage/object server_bootstrap_object => [chef_slice, chef_container] read_or_create
+        container_name      = 'chef_container'
+        file_name           = 'bootstrap_server.sh'
+        slice               = chef_slice
+        content_data        = server_bootstrap_data
+        
+    # associate the cloudstorage object with the chef-server script
+    /orchestration/script server_bootstrap_script => [chef_slice, chef_container, server_bootstrap_object] read_or_create
+        data_uri            = 'cloudstorage://chef_slice/chef_container/bootstrap_server.sh'
+        script_type         = _SHELL
+        encoding            = _STORAGE
+
+    # create the recipe and associate the script
+    /orchestration/recipe server_bootstrap_recipe read_or_create
+        scripts             = [server_bootstrap_script]
+
+    #-------------------------------
+    # create the chef-server
+    #-------------------------------
+    
+    /server/cloud chef_server read_or_create
+        hostname            = '{{ server_hostname }}'
+        image               = '{{ server_image_type }}'
+        service_type        = '{{ server_instance_type }}'
+        keys                = [chef_server_password_key, chef_server_console_key]
+        recipes             = [server_bootstrap_recipe]
+        
+    	
+    #-------------------------------
+    # create client-server bootstrap 
+    # script and recipe
+    #-------------------------------
+
+    # place script data in cloudstorage
+    /storage/object client_bootstrap_object => [chef_slice, chef_container, chef_server] read_or_create
+        container_name      = 'chef_container'
+        file_name           = 'bootstrap_client.sh'
+        slice               = chef_slice
+        content_data        = client_bootstrap_data
+        
+    # associate the cloudstorage object with the chef-client script
+    /orchestration/script client_bootstrap_script => [chef_slice, chef_container, client_bootstrap_object] read_or_create
+        data_uri            = 'cloudstorage://chef_slice/chef_container/bootstrap_client.sh'
+        script_type         = _SHELL
+        encoding            = _STORAGE
+
+    # create the recipe and associate the script
+    /orchestration/recipe client_bootstrap_recipe read_or_create
+        scripts             = [client_bootstrap_script]
+
+    #-------------------------------
+    # create the chef-client
+    #-------------------------------
+    
+    /server/cloud chef_client read_or_create
+        hostname            = '{{ client_hostname }}'
+        image               = '{{ client_image_type }}'
+        service_type        = '{{ client_instance_type }}'
+        keys                = [chef_server_password_key, chef_server_console_key]
+        recipes             = [client_bootstrap_recipe]
+		
+		
+#-------------------------
+# CHEF-SERVER
+#-------------------------
+
+text_template server_bootstrap_data
+#!/bin/sh
+
+# get latest package list
+apt-get update
+
+# Download latest version of chef-server for Ubuntu 14.04
+wget https://web-dl.packagecloud.io/chef/stable/packages/{{ system }}/{{ sys_server_version }}/chef-server-core_{{ chef_version }}.deb
+
+# Install chef-server
+dpkg -i chef-server-core_{{ chef_version }}.deb
+sleep 20s
+export HOME="/root"
+
+# Initial reconfiguring chef-server
+chef-server-ctl reconfigure
+
+# Install opscode-manage
+chef-server-ctl install opscode-manage
+opscode-manage-ctl reconfigure
+
+# Reconfiguring chef-server with opscode-manage
+chef-server-ctl reconfigure
+
+# Create admin user and organization
+chef-server-ctl user-create {{ admin_user }} {{ admin_user_full }} {{ admin_mail }} {{ admin_password_key.password }} --filename /etc/chef/{{ admin_user }}.pem
+chef-server-ctl org-create {{ organization_short }} {{ organization_full }} --association_user {{ admin_user }} --filename /etc/chef/{{ organization_short }}.pem
+
+# Create validator key
+chef-server-ctl list-client-keys hds hds-validator | awk 'NR>=6' > /etc/chef/{{ organization_short }}-validator.pem
+
+_eof
+
+#-------------------------
+# CHEF-CLIENT
+#-------------------------
+
+text_template client_bootstrap_data
+#!/bin/sh
+
+# get latest package list
+apt-get update
+
+# Install expect
+apt-get install expect -y
+
+# Add chef-server to hosts
+echo "{{ chef_server.ipaddress_public }} {{ server_hostname }}" >> /etc/hosts
+
+# Download & install chef-client
+wget https://opscode-omnibus-packages.s3.amazonaws.com/{{ system }}/{{ sys_client_version }}/x86_64/chef_{{ chef_version }}.deb
+dpkg -i chef_{{ chef_version }}.deb
+
+# Remove interactive permit to adding to known hosts
+sed -r "s/#   StrictHostKeyChecking ask/StrictHostKeyChecking no/g" /etc/ssh/ssh_config > /etc/ssh/ssh_conf
+mv /etc/ssh/ssh_conf /etc/ssh/ssh_config
+
+# Copy validator key from server
+mkdir /etc/chef
+
+# Create 'expect' script for coping validation key
+cat <<\EOS>/tmp/copy.exp
+#!/usr/bin/expect -f
+spawn scp root@{{ chef_server.ipaddress_public }}:/etc/chef/{{ organization_short }}.pem /etc/chef/{{ organization_short }}-validator.pem
+expect "password:" {send "{{ chef_server_password_key.password }}\n" }
+expect "$ $"
+EOS
+chmod +x /tmp/copy.exp
+
+#Now run script
+/tmp/copy.exp
+
+# Create client config
+cat <<\EOF>/etc/chef/client.rb
+log_level        :info
+log_location     STDOUT
+chef_server_url  'https://{{ server_hostname }}/organizations/{{ organization_short }}'
+validation_key         "/etc/chef/{{ organization_short }}-validator.pem"
+validation_client_name '{{ organization_short }}-validator'
+EOF
+
+# Copy SSL cert from server
+mkdir /etc/chef/trusted_certs
+
+# Create 'expect' script for coping SSL key
+cat <<\EOS>/tmp/copy_ssl.exp
+#!/usr/bin/expect -f
+spawn scp root@{{ chef_server.ipaddress_public }}:/var/opt/opscode/nginx/ca/{{ server_hostname }}.crt /etc/chef/trusted_certs/
+expect "password:" {send "{{ chef_server_password_key.password }}\n" }
+expect "$ $"
+EOS
+chmod +x /tmp/copy_ssl.exp
+
+# Run it
+/tmp/copy_ssl.exp
+
+# Run chef-client
+/usr/bin/chef-client
+
+_eof
+
+#------------------------
+# RESULT TEMPLATE
+#------------------------
+
+text_template chef_result_template
+
+Your chef-server is located at:
+
+{{ chef_server.ipaddress_public }}
+
+You may SSH to your server and login with the following credentials:
+
+username: root
+password: {{ chef_server_password_key.password }}
+
+Also you can login to chef-server webui:
+
+https://{{ chef_server.ipaddress_public }}/
+
+username: {{ admin_user }}
+password: {{ chef_server_password_key.password }}
+
+Your chef-client is located at:
+
+{{ chef_client.ipaddress_public }}
+
+You may SSH to your server and login with the following credentials:
+
+username: root
+password: {{ chef_server_password_key.password }}
+
+_eof
+

@@ -1,4 +1,4 @@
-# Install ElasticSearch 1.4.2, LogStash 1.4.2, Kibana 3.1.2 on a CS2.2-SSD Cloudlet ($.03/hr) running Linux CentOS 6.5 64-bit
+# Install ElasticSearch 1.4.2, LogStash 1.4.2, Kibana 3.1.2 on a CS2.2-SSD Cloudlet ($.03/hr) running Linux CentOS 6.6 64-bit
 cloudscript elk_single_stack
     version                 = _latest
     result_template         = elk_result_template
@@ -6,7 +6,7 @@ cloudscript elk_single_stack
 globals
     elk_hostname            = 'elk'
     elk_instance_type       = 'CS2.2-SSD'    # 2GB RAM, 2 vCore(s), 50GB SSD, 10Gbps
-    elk_image_type          = 'Linux CentOS 6.5 64-bit'
+    elk_image_type          = 'Linux CentOS 6.6 64-bit'
     elk_slice_user          = 'elk'
     elasticsearch_version   = 'elasticsearch-1.4.2'
     logstash_version        = 'logstash-1.4.2'
