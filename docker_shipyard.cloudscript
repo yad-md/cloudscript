@@ -54,21 +54,21 @@ task docker_shipyard_server_setup
         slice               = docker_shipyard_slice
 
     # Place script data in cloudstorage
-    /storage/object docker_bootstrap_object => [docker_shipyard_slice, docker_shipyard_container] read_or_create
+    /storage/object docker_shipyard_bootstrap_object => [docker_shipyard_slice, docker_shipyard_container] read_or_create
         container_name      = 'docker_shipyard_container'
         file_name           = 'bootstrap_docker.sh'
         slice               = docker_shipyard_slice
-        content_data        = docker_bootstrap_data
+        content_data        = docker_shipyard_bootstrap_data
 
     # Associate the cloudstorage object with the docker script
-    /orchestration/script docker_bootstrap_script => [docker_shipyard_slice, docker_shipyard_container, docker_bootstrap_object] read_or_create
+    /orchestration/script docker_shipyard_bootstrap_script => [docker_shipyard_slice, docker_shipyard_container, docker_shipyard_bootstrap_object] read_or_create
         data_uri            = 'cloudstorage://docker_shipyard_slice/docker_shipyard_container/bootstrap_docker.sh'
         script_type         = _SHELL
         encoding            = _STORAGE
 
     # Create the recipe and associate the script
-    /orchestration/recipe docker_bootstrap_recipe read_or_create
-        scripts             = [docker_bootstrap_script]
+    /orchestration/recipe docker_shipyard_bootstrap_recipe read_or_create
+        scripts             = [docker_shipyard_bootstrap_script]
 
     #--------------------------
     # Create the docker server
@@ -79,9 +79,9 @@ task docker_shipyard_server_setup
         image               = '{{ docker_image_type }}'
         service_type        = '{{ docker_instance_type }}'
         keys                = [docker_shipyard_server_password_key, docker_shipyard_server_console_key]
-        recipes             = [docker_bootstrap_recipe]
+        recipes             = [docker_shipyard_bootstrap_recipe]
 
-text_template docker_bootstrap_data
+text_template docker_shipyard_bootstrap_data
 #!/bin/sh
 
 # check if running as root
