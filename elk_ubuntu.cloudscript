@@ -1,0 +1,206 @@
+# Install ElasticSearch 1.4.2, LogStash 1.4.2, Kibana 3.1.2 on a CS2.2-SSD Cloudlet ($.03/hr) running Ubuntu 14.04 Linux 64-bit
+cloudscript elk_single_stack
+    version                 = _latest
+    result_template         = elk_result_template
+
+globals
+    elk_hostname            = 'elk'
+    elk_instance_type       = 'CS2.2-SSD'    # 2GB RAM, 2 vCore(s), 50GB SSD, 10Gbps
+    elk_image_type          = 'Ubuntu Server 14.04 LTS'
+    elk_slice_user          = 'elk'
+    elasticsearch_version   = 'elasticsearch-1.4.2'
+    logstash_version        = 'logstash-1.4.2'
+    kibana_version          = 'kibana-3.1.2'
+    # passwords setup
+    server_password         = lib::random_password()
+    console_password        = lib::random_password()
+
+thread elk_setup
+    tasks                       = [elk_server_setup]
+
+task elk_server_setup
+
+    #-----------------
+    # Create elk keys
+    #-----------------
+
+    # Create elk server root password key
+    /key/password elk_server_password_key read_or_create
+        key_group           = _SERVER
+        password            = server_password
+
+    # Create elk server console key
+    /key/password elk_server_console_key read_or_create
+        key_group           = _CONSOLE
+        password            = console_password
+
+    #----------------------------
+    # Create elk storage slice,
+    # bootstrap script and recipe
+    #-----------------------------
+
+    # Create storage slice keys
+    /key/token elk_slice_key read_or_create
+        username            = elk_slice_user
+
+    # Create slice to store script in cloudstorage
+    /storage/slice elk_slice read_or_create
+        keys                = [elk_slice_key]
+
+    # Create slice container to store script in cloudstorage
+    /storage/container elk_container => [elk_slice] read_or_create
+        slice               = elk_slice
+
+    # Place script data in cloudstorage
+    /storage/object elk_bootstrap_object => [elk_slice, elk_container] read_or_create
+        container_name      = 'elk_container'
+        file_name           = 'bootstrap_elk.sh'
+        slice               = elk_slice
+        content_data        = elk_bootstrap_data
+
+    # Associate the cloudstorage object with the elk script
+    /orchestration/script elk_bootstrap_script => [elk_slice, elk_container, elk_bootstrap_object] read_or_create
+        data_uri            = 'cloudstorage://elk_slice/elk_container/bootstrap_elk.sh'
+        script_type         = _SHELL
+        encoding            = _STORAGE
+
+    # Create the recipe and associate the script
+    /orchestration/recipe elk_bootstrap_recipe read_or_create
+        scripts             = [elk_bootstrap_script]
+
+    #-----------------------
+    # Create the elk server
+    #-----------------------
+
+    /server/cloud elk_server read_or_create
+        hostname            = '{{ elk_hostname }}'
+        image               = '{{ elk_image_type }}'
+        service_type        = '{{ elk_instance_type }}'
+        keys                = [elk_server_password_key, elk_server_console_key]
+        recipes             = [elk_bootstrap_recipe]
+
+text_template elk_bootstrap_data
+#!/bin/sh
+
+# check if running as root
+[ `whoami` = 'root' ] || {
+    echo "ERROR: must have root permissions to execute the commands"
+    exit 1
+}
+
+#
+# Install packages
+#
+
+# get latest package list
+apt-get update
+
+# install wget
+apt-get install wget -y
+
+# install apache2
+apt-get install apache2 -y 
+
+# install and setup Java from source to avoid interactive questions
+mkdir -p /usr/lib/jvm
+cd /usr/lib/jvm
+wget --no-check-certificate --no-cookies --header "Cookie: oraclelicense=accept-securebackup-cookie" http://download.oracle.com/otn-pub/java/jdk/7u51-b13/jdk-7u51-linux-x64.tar.gz
+tar zxf jdk-7u51-linux-x64.tar.gz
+update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/jdk1.7.0_51/bin/javac 1
+update-alternatives --install /usr/bin/java java /usr/lib/jvm/jdk1.7.0_51/bin/java 1
+update-alternatives --set javac /usr/lib/jvm/jdk1.7.0_51/bin/javac
+update-alternatives --set java /usr/lib/jvm/jdk1.7.0_51/bin/java
+cat <<\EOF>>/etc/profile
+
+JAVA_HOME=/usr/lib/jvm/jdk1.7.0_51
+PATH=$PATH:$JAVA_HOME/bin
+export JAVA_HOME
+export PATH
+EOF
+export JAVA_HOME=/usr/lib/jvm/jdk1.7.0_51
+export PATH=$PATH:$JAVA_HOME/bin
+
+# install and setup Elasticsearch
+cd /opt/
+wget https://download.elasticsearch.org/elasticsearch/elasticsearch/{{ elasticsearch_version }}.tar.gz
+tar -xf {{ elasticsearch_version }}.tar.gz
+ln -s /opt/{{ elasticsearch_version }} /opt/elasticsearch
+
+# modify Elasticsearch config
+echo "http.cors.enabled: true" >> /opt/elasticsearch/config/elasticsearch.yml
+
+# start up Elasticsearch in the background
+/opt/elasticsearch/bin/elasticsearch -d
+
+# install and setup Logstash
+cd /opt/
+wget https://download.elasticsearch.org/logstash/logstash/{{ logstash_version }}.tar.gz
+tar -xf {{ logstash_version }}.tar.gz
+ln -s /opt/{{ logstash_version }} /opt/logstash
+
+# prepare a logstash.conf file for Apache logs
+cat <<\EOF>/opt/logstash/logstash.conf
+input {
+  file {
+    path => "/tmp/access_log"
+    start_position => beginning
+    sincedb_path => "/opt/logstash/sincedb.log"
+  }
+}
+filter {
+  if [path] =~ "access" {
+    mutate { replace => { "type" => "apache_access" } }
+    grok {
+      match => { "message" => "%{COMBINEDAPACHELOG}" }
+    }
+  }
+  date {
+    match => [ "timestamp" , "dd/MMM/yyyy:HH:mm:ss Z" ]
+  }
+}
+output {
+  elasticsearch {
+    host => localhost
+  }
+  stdout { codec => rubydebug }
+}
+EOF
+
+# start logstash
+nohup /bin/bash /opt/logstash/bin/logstash agent -f /opt/logstash/logstash.conf -l /opt/logstash/logstash.log > /dev/null 2>&1 &
+
+# install and setup Kibana
+cd /opt/
+wget https://download.elasticsearch.org/kibana/kibana/{{ kibana_version }}.tar.gz
+tar -xf {{ kibana_version }}.tar.gz
+
+# copy the contents of the extracted directory to your webserver root directory
+cp -R /opt/{{ kibana_version }}/* /var/www/html
+chown -R www-data:www-data /var/www/html
+
+# change kibana conf 
+sed -r 's@ elasticsearch:.*@ elasticsearch: "http://"+window.location.hostname+":9200",@g' /var/www/html/config.js  > /var/www/html/config_new.js
+mv /var/www/html/config_new.js /var/www/html/config.js
+
+# Restart apache
+service apache2 restart
+
+# autostart elasticsearch
+sed -r "s/exit 0//g" /etc/rc.local.orig > /etc/rc.local.orig.tmp
+mv /etc/rc.local.orig.tmp /etc/rc.local.orig
+echo '/opt/elasticsearch/bin/elasticsearch -d' >> /etc/rc.local.orig
+echo '/bin/bash /opt/logstash/bin/logstash agent -f /opt/logstash/logstash.conf -l /opt/logstash/logstash.log &' >> /etc/rc.local.orig
+echo "exit 0" >> /etc/rc.local.orig
+chmod +x /etc/rc.local.orig
+
+_eof
+
+text_template elk_result_template
+
+Your Elasticsearch + Logstash + Kibana is ready at the following IP address:
+
+http://{{ elk_server.ipaddress_public }}/
+
+Go to your server address and read the Kibana dashboard for further instructions.
+
+_eof
