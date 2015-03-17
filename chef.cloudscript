@@ -20,7 +20,7 @@ globals
     organization_short      = 'companyname'
     organization_full       = 'Company Name'
     admin_user              = 'admin'
-    admin_user_full         = 'Administrator'
+    admin_user_full         = 'Chef Administrator' #Format is two separated words
     admin_mail              = 'admin@companyname.com'
     admin_password          = lib::random_password()
     
@@ -162,10 +162,28 @@ chef-server-ctl reconfigure
 
 # Create admin user and organization
 chef-server-ctl user-create {{ admin_user }} {{ admin_user_full }} {{ admin_mail }} {{ admin_password_key.password }} --filename /etc/chef/{{ admin_user }}.pem
-chef-server-ctl org-create {{ organization_short }} {{ organization_full }} --association_user {{ admin_user }} --filename /etc/chef/{{ organization_short }}.pem
+chef-server-ctl org-create {{ organization_short }} {{ organization_full }} --association_user {{ admin_user }} --filename /etc/chef/{{ organization_short }}-validator.pem
 
-# Create validator key
-chef-server-ctl list-client-keys hds hds-validator | awk 'NR>=6' > /etc/chef/{{ organization_short }}-validator.pem
+#Download and install chef admin tool - knife
+wget https://opscode-omnibus-packages.s3.amazonaws.com/{{ system }}/{{ sys_client_version }}/x86_64/chef_{{ chef_version }}.deb
+dpkg -i chef_{{ chef_version }}.deb
+
+#Create knife config
+cat <<\EOF> /etc/chef/knife.rb
+log_level                :info
+log_location             STDOUT
+node_name                'admin'
+client_key               '/etc/chef/admin.pem'
+validation_client_name   '{{ organization_short }}-validator'
+validation_key           '/etc/chef/{{ organization_short }}-validator.pem'
+chef_server_url          'https://{{ server_hostname }}/organizations/{{ organization_short }}'
+syntax_check_cache_path  '/etc/chef/syntax_check_cache'
+cookbook_path [ '/etc/chef/cookbooks' ]
+EOF
+
+# Copy SSL cert from server
+mkdir /etc/chef/trusted_certs
+cp /var/opt/opscode/nginx/ca/{{ server_hostname }}.crt /etc/chef/trusted_certs/
 
 _eof
 
@@ -199,7 +217,7 @@ mkdir /etc/chef
 # Create 'expect' script for coping validation key
 cat <<\EOS>/tmp/copy.exp
 #!/usr/bin/expect -f
-spawn scp root@{{ chef_server.ipaddress_public }}:/etc/chef/{{ organization_short }}.pem /etc/chef/{{ organization_short }}-validator.pem
+spawn scp root@{{ chef_server.ipaddress_public }}:/etc/chef/{{ organization_short }}-validator.pem /etc/chef/
 expect "password:" {send "{{ chef_server_password_key.password }}\n" }
 expect "$ $"
 EOS
@@ -257,7 +275,7 @@ Also you can login to chef-server webui:
 https://{{ chef_server.ipaddress_public }}/
 
 username: {{ admin_user }}
-password: {{ chef_server_password_key.password }}
+password: {{ admin_password_key.password }}
 
 Your chef-client is located at:
 
