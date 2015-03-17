@@ -1,0 +1,398 @@
+cloudscript nagios_chef_client
+    version             = _latest
+    result_template     = nagios_server_result_template
+
+globals
+    nagios_server_hostname  = 'nagios-server'
+    nagios_instance_type    = 'CS1-SSD' # 1GB RAM, 1 vCore, 25GB SSD, 10Gbps
+    nagios_image_type       = 'Ubuntu Server 14.04 LTS'
+    #latest version always here: https://www.chef.io/download-chef-client/
+    system                  = 'ubuntu'
+    sys_server_version      = 'trusty'
+    sys_client_version      = '13.04'
+    chef_version            = '12.0.6-1_amd64'
+    server_pass             = lib::random_password()
+    console_pass            = lib::random_password()
+    chef_slice_user         = 'chef'
+    organization_short      = 'companyname'
+    organization_full       = 'Company Name'
+    admin_user              = 'admin'
+    admin_user_full         = 'Chef Administrator' #Format is two separated words
+    admin_mail              = 'admin@companyname.com'
+    chef_client_version     = '12.1.2-1_amd64'
+
+    server_password         = lib::random_password()
+    admin_password          = lib::random_password()
+    console_password        = lib::random_password()
+    nagios_slice_user       = 'nagios'
+
+thread chef_setup
+    tasks               = [nagios_server_setup]
+    
+task nagios_server_setup
+    #-------------------------------
+    # create keys
+    #-------------------------------
+
+    # create nagios admin password key
+    /key/password nagios_admin_password_key read_or_create
+        key_group           = _SERVER
+        password            = admin_password
+    
+    # create nagios server root password key
+    /key/password nagios_server_password_key read_or_create
+        key_group           = _SERVER
+        password            = server_password
+        
+    # create nagios server console key
+    /key/password nagios_server_console_key read_or_create
+        key_group           = _CONSOLE
+        password            = console_password
+        
+    # create storage slice keys
+    /key/token nagios_slice_key read_or_create
+        username            = nagios_slice_user
+        
+    #-------------------------------
+    # create slice and container
+    #-------------------------------
+    
+    # create slice to store script in cloudstorage
+    /storage/slice nagios_slice read_or_create
+        keys                = [nagios_slice_key]
+    
+    # create slice container to store script in cloudstorage
+    /storage/container nagios_container => [nagios_slice] read_or_create
+        slice               = nagios_slice
+
+    #-------------------------------
+    # create nagios bootstrap 
+    # script and recipe
+    #-------------------------------
+        
+    # place script data in cloudstorage
+    /storage/object nagios_server_bootstrap_object => [nagios_slice, nagios_container] read_or_create
+        container_name      = 'nagios_container'
+        file_name           = 'bootstrap_nagios_server.sh'
+        slice               = nagios_slice
+        content_data        = nagios_server_script_template
+        
+    # associate the cloudstorage object with the haproxy script
+    /orchestration/script nagios_server_bootstrap_script => [nagios_slice, nagios_container, nagios_server_bootstrap_object] read_or_create
+        data_uri            = 'cloudstorage://nagios_slice/nagios_container/bootstrap_nagios_server.sh'
+        script_type         = _SHELL
+        encoding            = _STORAGE
+    
+    # create the recipe and associate the script
+    /orchestration/recipe nagios_server_bootstrap_recipe read_or_create
+        scripts             = [nagios_server_bootstrap_script]
+
+    #-------------------------------
+    # create the nagios server
+    #-------------------------------
+
+    /server/cloud nagios_server read_or_create
+        hostname            = '{{ nagios_server_hostname }}'
+        image               = '{{ nagios_image_type }}'
+        service_type        = '{{ nagios_instance_type }}'
+        keys                = [nagios_server_password_key, nagios_server_console_key]
+        recipes             = [nagios_server_bootstrap_recipe]
+        recipe_timeout      = 600   
+    
+text_template nagios_server_script_template
+#!/bin/bash
+
+#Update repo
+apt-get update
+
+#Install git
+apt-get install git -y
+
+# Download latest version of chef-server for Ubuntu 14.04
+wget https://web-dl.packagecloud.io/chef/stable/packages/{{ system }}/{{ sys_server_version }}/chef-server-core_{{ chef_version }}.deb
+
+# Install chef-server
+dpkg -i chef-server-core_{{ chef_version }}.deb
+sleep 20s
+export HOME="/root"
+
+# Initial reconfiguring chef-server
+chef-server-ctl reconfigure
+
+# Install opscode-manage
+#chef-server-ctl install opscode-manage
+#opscode-manage-ctl reconfigure
+
+# Reconfiguring chef-server with opscode-manage
+#chef-server-ctl reconfigure
+
+# Create admin user and organization
+chef-server-ctl user-create {{ admin_user }} {{ admin_user_full }} {{ admin_mail }} {{ nagios_admin_password_key.password }} --filename /etc/chef/{{ admin_user }}.pem
+chef-server-ctl org-create {{ organization_short }} {{ organization_full }} --association_user {{ admin_user }} --filename /etc/chef/{{ organization_short }}-validator.pem
+
+#Download latest version of chef-client
+wget https://opscode-omnibus-packages.s3.amazonaws.com/{{ system }}/{{ sys_client_version }}/x86_64/chef_{{ chef_client_version }}.deb
+
+#Install it
+dpkg -i chef_{{ chef_client_version }}.deb
+
+#Create chef-client config
+cat <<\EOF> /etc/chef/client.rb
+log_level        :info
+log_location     STDOUT
+chef_server_url  'https://{{ nagios_server_hostname }}:443/organizations/{{ organization_short }}'
+validation_key         "/etc/chef/{{ organization_short }}-validator.pem"
+validation_client_name '{{ organization_short }}-validator'
+trusted_certs_dir "/etc/chef/trusted_certs"
+EOF
+
+#Create dirs
+mkdir /etc/chef/trusted_certs
+mkdir /etc/chef/cookbooks
+mkdir /etc/chef/syntax_check_cache
+
+#Create knife config
+cat <<\EOF> /etc/chef/knife.rb
+log_level                :info
+log_location             STDOUT
+node_name                '{{ admin_user }}'
+client_key               '/etc/chef/{{ admin_user }}.pem'
+validation_client_name   '{{ organization_short }}-validator'
+validation_key           '/etc/chef/{{ organization_short }}-validator.pem'
+chef_server_url          'https://{{ nagios_server_hostname }}/organizations/{{ organization_short }}'
+syntax_check_cache_path  '/etc/chef/syntax_check_cache'
+cookbook_path [ '/etc/chef/cookbooks' ]
+knife[:editor] = "vim"
+EOF
+
+#Copy SSL certificate
+cd /etc/chef
+knife ssl fetch
+
+#Create github key
+mkdir -p /tmp/private_code/.ssh
+cat <<\EOF> /tmp/private_code/.ssh/github
+-----BEGIN RSA PRIVATE KEY-----
+MIIEogIBAAKCAQEA0WAjWtkShNC/Hde4pblsTS1xlGrBNUjgAyj09SZl509xPwBT
+9mYm1uwWWMcrD8Rpg/m07ARrYJrr87g8U4SL57olaZ6WmP0KLByzyT8++MFk9y7Y
+s7rE3gyDpS4jiasqcpXlcyE1U0/peeU9nEn+PvDtalMLaV0asZkVM/JFclFWTBgC
+FVVrfkIjsmvuwRgYFxREBw076tDh0fzWCNDgv819Ef4lOujHOEbHaszM4tqVgAP4
+owwNdYcZM5ojILowyFBhaSa3WvkVdolz2weLvjIk06gxueRhkTua0H4/5XJvSJJ1
+7CFEbzZ8SpZxe9bWErzuHd/WZhF7xQy4MaUSpwIDAQABAoIBADLLKuiQPtDfv22i
+9tWljSOQAbzqxSKDIm1B02NhxFkASc3p63ScRZHgRm+VKdoyYRK2UnDrhY0zKEjB
+CkmMn1BBNXBRG+HTiVM4R1lsMX+xkyfwQnwftEDWMl2xOsfcMXkI6lgq1z/15ANB
+XNf8j2R/mGkx6lPOVXp+U8l9XeGkby3gyreusA2b8oNpFsfgE0MU/2CP7TC1LlZ2
+A7SkfjajliLHZe+99/GvOLIQW/2QDYnIELawUvpiU9+GHhpxnxecs2Zh5oFTTOez
+izNuVBtZRGaDCtYqGg0cvF4nGG2dGX7uGDIGc5u9bRT8uBWGaIqkdUewy+iGZoJM
+2hgLa/kCgYEA+dGawwESzbuCUzXd06pJLUXWPqZP48coOD4LmSZBpecJ5diIiV1b
+/gEkifcJt0KEop6j1WrNeqlXCoFEy88/tdrq5Vo+Wlkh7AJhHS4XqX/EGhCQi58S
+7dmIcqHFMADxxbcMxeTn5D/xZhrRUbF0Nj0h/XPQmzNVyHqrE5+cxcUCgYEA1o5b
+8ElCovkPYwF25ngxfUJeQ+Q8obrMiUBmvrOzVQKAsSiHKgppIDv2KeqTPuFF4LAs
+4MnNexnG0BynFDrT7qmD5oE9l1Ld+B5HwSPW0incrjKCNDLLZPLs00fFBCi/uxIJ
+OEtjV64Nu2o8//AF4LkjNaQuYNaw9cNQpjbnqXsCgYA9hwcz0fbcnrr5XYH12LHP
+Ka0bnwB8HBfmyjk3DfoLLzz70/nEwy6d/5ANPr+w1/wsxR+at4RGGqDqYG4eODv7
+wSArPq+uttco9mkOs8R2JZaZyMyg5pvV4sa9XORg70qcpHnL35XRXIJK4H3/PdJe
+bW4Kq1SMdPdCuhuaaKxG9QKBgFJ20uVu8vq6qWxPMsjwJ21SZfLINXmf119lblgb
+r3CcDqSIxDKnX7Jw+XMw4rlHUllCvW0Eg0KuLJjuelUvKyfO5ZBh2i9gPUpRMRkN
+0lJinpwhc6PmZgB90gJ+0j1///lBvGNzrlIT5tlCwwFH2qp93geO+/hibA95q3TH
+I5EjAoGACgi6h0xXcDh24GKBtbSpeHiGfaKXdsslDHS0q8nE4e3gPyQ+D6XMkHs7
+E0GjMcSYdmYAc9NOLI0BYXXJY5Y0wrkHfhVicYuyh3gv6Wz7jS8brKtJGAb9LLL6
+xxSqObPyp0/rA3w4k1kAQGvcw93qnCqWsUCSmZYgS6ONyR81P98=
+-----END RSA PRIVATE KEY-----
+EOF
+chmod 0600 /tmp/private_code/.ssh/github
+
+#Copy chef-repo cookbook from github
+mv /etc/ssh/ssh_config /etc/ssh/ssh_config.tmp
+sed -e 's/^.*StrictHostKeyChecking.*/StrictHostKeyChecking no/g' /etc/ssh/ssh_config.tmp > /etc/ssh/ssh_config
+eval `ssh-agent -s`
+ssh-add /tmp/private_code/.ssh/github
+cd /etc/chef
+git clone git@github.com:nephoscale/chef-repo.git -b hds cookbooks/chef-repo
+
+#Copy nagios cookbook from github
+wget https://github.com/tas50/nagios/archive/v5.0.2.zip
+apt-get install unzip -y
+unzip -qq v5.0.2.zip -d cookbooks/
+mv cookbooks/nagios-5.0.2 cookbooks/nagios
+
+
+#Download dependencies
+knife cookbook site download apache2
+knife cookbook site download build-essential
+knife cookbook site download nginx
+knife cookbook site download nginx_simplecgi
+knife cookbook site download php
+knife cookbook site download yum
+knife cookbook site download iptables
+knife cookbook site download logrotate
+knife cookbook site download apt
+knife cookbook site download ohai
+knife cookbook site download runit
+knife cookbook site download yum-epel
+knife cookbook site download bluepill
+knife cookbook site download rsyslog
+knife cookbook site download perl
+knife cookbook site download xml
+knife cookbook site download mysql
+knife cookbook site download windows
+knife cookbook site download iis
+knife cookbook site download chef-sugar
+knife cookbook site download yum-mysql-community
+knife cookbook site download smf
+knife cookbook site download rbac
+knife cookbook site download chef_handler
+knife cookbook site download nrpe
+
+#Extract dependencies
+ls *.tar.gz | xargs -i tar -zxf {} -C cookbooks/
+rm *.tar.gz
+
+#Install dependencies
+knife cookbook upload build-essential
+knife cookbook upload yum
+knife cookbook upload logrotate
+knife cookbook upload iptables
+knife cookbook upload apache2
+knife cookbook upload apt
+knife cookbook upload ohai
+knife cookbook upload yum-epel
+knife cookbook upload rsyslog
+knife cookbook upload bluepill
+knife cookbook upload runit
+knife cookbook upload nginx
+knife cookbook upload perl
+knife cookbook upload nginx_simplecgi
+knife cookbook upload chef-sugar
+knife cookbook upload xml
+knife cookbook upload yum-mysql-community
+knife cookbook upload rbac
+knife cookbook upload smf
+knife cookbook upload mysql
+knife cookbook upload chef_handler
+knife cookbook upload windows
+knife cookbook upload iis
+knife cookbook upload php
+knife cookbook upload nrpe
+knife cookbook upload nagios
+
+#Create role on server
+cat <<\EOF> /etc/chef/role_nagios.json
+{
+  "name": "nagios-server",
+  "description": "nasios server cookbook",
+  "json_class": "Chef::Role",
+  "default_attributes": {
+
+  },
+  "override_attributes": {
+    "nagios": {
+        "server": {
+          "web_server": "apache",
+          "stop_apache": "false"
+        },
+        "server_auth_method": "htpasswd"
+    }
+  },
+  "chef_type": "role",
+  "run_list": [
+    "recipe[nagios]"
+  ],
+  "env_run_lists": {
+
+  }
+}
+EOF
+
+#Add role to server
+knife role from file role_nagios.json
+
+#Create role and run-list for node
+cat <<\EOF> /etc/chef/nagios-server.json
+{
+ "run_list": [
+              "role[nagios-server]"
+ ]
+}
+EOF
+
+#Change default nagios admin password
+####This is for test mode
+#apt-get install apache2-utils -y
+#mkdir /etc/nagios3/
+#htpasswd -cb /etc/nagios3/htpasswd.users nagiosadmin {{ nagios_admin_password_key.password }}
+#PASSWORD=`htpasswd -nbs nagiosadmin {{ nagios_admin_password_key.password }} | sed -r 's/nagiosadmin://g'`#
+#
+##Create databag "Users"
+#cat <<\EOF> /etc/chef/users.json
+#{
+#  "id": "nagiosadmin",
+#  "groups": "sysadmin",
+#  "htpasswd": "PASSWORD",
+#  "nagios": {
+#    "pager": "nagiosadmin_pager@example.com",
+#    "email": "nagiosadmin@example.com"
+#  }
+#}
+#EOF
+#sed -r "s/PASSWORD/$PASSWORD/g" /etc/chef/users.json > /etc/chef/users_new.json
+#mv /etc/chef/users_new.json /etc/chef/users.json
+#knife data bag create users
+#knife data bag from file users /etc/chef/users.json
+#### This works only with "nagios_users" data bag
+knife data bag create users
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_users/ -type f`; do knife data bag from file users $ff; done
+
+#Create empty databags
+knife data bag create nagios_services
+knife data bag create nagios_servicegroups
+knife data bag create nagios_templates
+knife data bag create nagios_hosttemplates
+knife data bag create nagios_eventhandlers
+knife data bag create nagios_unmanagedhosts
+knife data bag create nagios_serviceescalations
+knife data bag create nagios_hostescalations
+knife data bag create nagios_contacts
+knife data bag create nagios_contactgroups
+knife data bag create nagios_servicedependencies
+knife data bag create nagios_timeperiods
+
+#Upload databags
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_services/ -type f`; do knife data bag from file nagios_services $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_servicegroups/ -type f`; do knife data bag from file nagios_servicegroups $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_templates/ -type f`; do knife data bag from file nagios_templates nagios_hosttemplates $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_eventhandlers/ -type f`; do knife data bag from file nagios_eventhandlers $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_unmanagedhosts/ -type f`; do knife data bag from file nagios_unmanagedhosts $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_serviceescalations/ -type f`; do knife data bag from file nagios_serviceescalations $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_hostescalations/ -type f`; do knife data bag from file nagios_hostescalations $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_contacts/ -type f`; do knife data bag from file nagios_contacts $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_contactgroups/ -type f`; do knife data bag from file nagios_contactgroups $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_servicedependencies/ -type f`; do knife data bag from file nagios_servicedependencies $ff; done
+for ff in `find /etc/chef/cookbooks/chef-repo/data_bag/nagios_timeperiods/ -type f`; do knife data bag from file nagios_timeperiods $ff; done
+
+#Change nginx listen port and restart nginx
+cp /var/opt/opscode/nginx/etc/nginx.conf /var/opt/opscode/nginx/etc/nginx.conf.bak
+sed -r "s/listen 80;/listen 81;/g" /var/opt/opscode/nginx/etc/nginx.conf.bak > /var/opt/opscode/nginx/etc/nginx.conf
+
+#Restart nginx
+/opt/opscode/embedded/sbin/nginx -s quit
+
+#Register node with chef-server
+/usr/bin/chef-client --json-attributes /etc/chef/nagios-server.json
+
+_eof
+
+text_template nagios_server_result_template
+
+Thank you for provisioning a nagios server setup.
+
+Your server is available now here:
+
+http://{{ nagios_server.ipaddress_public }}/nagios3/
+
+Please login using your credentials.
+
+If test mode for users active, then use
+Login: nagiosadmin
+Password: {{ nagios_admin_password_key.password }}
+_eof
